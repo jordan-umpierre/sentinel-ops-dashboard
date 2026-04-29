@@ -2,6 +2,8 @@ import { Activity, Bell, Boxes, ClipboardList, LayoutDashboard, LogOut, Map, Rad
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../features/auth/useAuth";
+import { LiveEventsProvider } from "../features/realtime/LiveEventsContext";
+import { useLiveEvents } from "../features/realtime/useLiveEvents";
 
 const navigation = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -12,7 +14,16 @@ const navigation = [
 ];
 
 export function AppShell() {
+  return (
+    <LiveEventsProvider>
+      <AppShellContent />
+    </LiveEventsProvider>
+  );
+}
+
+function AppShellContent() {
   const { user, logout } = useAuth();
+  const { connectionStatus } = useLiveEvents();
 
   return (
     <div className="min-h-screen bg-ink-950 text-slate-100">
@@ -66,6 +77,7 @@ export function AppShell() {
             </div>
 
             <div className="flex items-center gap-3">
+              <LiveStatus status={connectionStatus} />
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-medium text-white">{user?.full_name}</p>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{user?.role}</p>
@@ -113,6 +125,24 @@ export function AppShell() {
           </main>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LiveStatus({ status }: { status: string }) {
+  const isLive = status === "live";
+
+  return (
+    <div
+      className={`hidden h-9 items-center gap-2 border px-3 text-xs font-semibold uppercase tracking-[0.16em] md:flex ${
+        isLive
+          ? "border-signal-green/30 bg-signal-green/10 text-signal-green"
+          : "border-signal-amber/30 bg-signal-amber/10 text-signal-amber"
+      }`}
+      title="Realtime simulator connection"
+    >
+      <span className={`h-2 w-2 ${isLive ? "bg-signal-green" : "bg-signal-amber"}`} />
+      {status}
     </div>
   );
 }

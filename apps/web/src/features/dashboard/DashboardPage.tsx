@@ -18,9 +18,11 @@ import { apiClient } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/date";
 import { assetStatusTone, incidentStatusTone, severityTone } from "../../lib/tones";
 import { useAuth } from "../auth/useAuth";
+import { useLiveEvents } from "../realtime/useLiveEvents";
 
 export function DashboardPage() {
   const { token } = useAuth();
+  const { connectionStatus, liveEvents } = useLiveEvents();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-overview"],
@@ -63,6 +65,12 @@ export function DashboardPage() {
   );
   const attentionAssets = data.assets.filter((asset) => asset.status !== "nominal").slice(0, 4);
   const latestIncident = data.incidents[0];
+  const mergedRecentEvents = [
+    ...liveEvents.map((message) => message.event),
+    ...data.recent_events.filter(
+      (event) => !liveEvents.some((message) => message.event.id === event.id)
+    ),
+  ].slice(0, 10);
 
   return (
     <div className="space-y-6">
@@ -191,10 +199,13 @@ export function DashboardPage() {
         <div className="border border-white/10 bg-ink-850 shadow-panel">
           <div className="flex h-14 items-center justify-between border-b border-white/10 px-5">
             <h3 className="font-semibold text-white">Recent Event Stream</h3>
-            <CheckCircle2 className="h-4 w-4 text-signal-green" />
+            <div className="flex items-center gap-2">
+              <StatusBadge value={connectionStatus} tone={connectionStatus === "live" ? "green" : "amber"} />
+              <CheckCircle2 className="h-4 w-4 text-signal-green" />
+            </div>
           </div>
           <div className="divide-y divide-white/10">
-            {data.recent_events.map((event) => (
+            {mergedRecentEvents.map((event) => (
               <article key={event.id} className="grid gap-3 p-4 sm:grid-cols-[120px_1fr]">
                 <div className="space-y-2">
                   <StatusBadge value={event.severity} tone={severityTone[event.severity]} />

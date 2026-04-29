@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? API_BASE_URL.replace(/^http/, "ws");
 
 export type UserRole = "admin" | "operator" | "viewer";
 export type Severity = "info" | "low" | "medium" | "high" | "critical";
@@ -147,6 +148,14 @@ export type EventHistoryPage = {
   };
 };
 
+export type LiveEventMessage = {
+  message_type: "event.created";
+  event: EventRecord;
+  asset: Asset;
+  incident: Incident | null;
+  emitted_at: string;
+};
+
 function toQueryString(params: Record<string, string | number | undefined>) {
   // URLSearchParams keeps filter construction structured and avoids hand-built
   // query strings as Phase 2 adds more searchable surfaces.
@@ -232,3 +241,9 @@ export const apiClient = {
     });
   }
 };
+
+export function liveEventsUrl(token: string) {
+  // Browser WebSocket APIs cannot attach Authorization headers, so the backend
+  // validates the same JWT through a query parameter before accepting the socket.
+  return `${WS_BASE_URL}/api/realtime/events?token=${encodeURIComponent(token)}`;
+}
