@@ -37,8 +37,8 @@ function AppShellContent() {
               <Radio className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-lg font-semibold text-white">Sentinel</p>
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Ops Console</p>
+              <p className="font-display text-xl font-bold uppercase tracking-[0.12em] text-white">Sentinel</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-slate-500">Ops Console</p>
             </div>
           </div>
 
@@ -70,11 +70,11 @@ function AppShellContent() {
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-20 flex min-h-20 items-center justify-between border-b border-white/10 bg-ink-950/92 px-4 backdrop-blur md:px-8">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
+              <div className="flex items-center gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.26em] text-slate-500">
                 <Activity className="h-4 w-4 text-signal-green" />
                 Live Readiness
               </div>
-              <h1 className="mt-1 truncate text-xl font-semibold text-white md:text-2xl">
+              <h1 className="mt-1 truncate font-display text-2xl font-bold uppercase tracking-[0.06em] text-white md:text-3xl">
                 Operational Awareness
               </h1>
             </div>
@@ -83,7 +83,7 @@ function AppShellContent() {
               <LiveStatus status={connectionStatus} />
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-medium text-white">{user?.full_name}</p>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{user?.role}</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">{user?.role}</p>
               </div>
               <button
                 type="button"
@@ -141,7 +141,7 @@ function LiveStatus({ status }: { status: string }) {
 
   return (
     <div
-      className={`hidden h-9 items-center gap-2 border px-3 text-xs font-semibold uppercase tracking-[0.16em] md:flex ${
+      className={`hidden h-9 items-center gap-2 border px-3 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] md:flex ${
         isLive
           ? "border-signal-green/30 bg-signal-green/10 text-signal-green"
           : "border-signal-amber/30 bg-signal-amber/10 text-signal-amber"

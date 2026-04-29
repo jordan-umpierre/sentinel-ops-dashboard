@@ -4,6 +4,11 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        display: ["Barlow Condensed", "sans-serif"],
+        sans: ["Barlow", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+      },
       colors: {
         ink: {
           950: "#070b10",
