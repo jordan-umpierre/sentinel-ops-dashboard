@@ -92,6 +92,8 @@ export type IncidentSummary = {
   affected_assets: string[];
   suggested_next_checks: string[];
   provider: string;
+  // ISO timestamp when the cached entry was generated; null for fresh responses.
+  cached_at: string | null;
 };
 
 export type DashboardOverview = {
@@ -236,8 +238,10 @@ export const apiClient = {
       headers: authHeaders(token)
     });
   },
-  getIncidentSummary(token: string, incidentId: string) {
-    return request<IncidentSummary>(`/api/incidents/${incidentId}/summary`, {
+  getIncidentSummary(token: string, incidentId: string, refresh = false) {
+    // refresh=true tells the backend to bypass the DB cache and regenerate.
+    const qs = refresh ? "?refresh=true" : "";
+    return request<IncidentSummary>(`/api/incidents/${incidentId}/summary${qs}`, {
       headers: authHeaders(token)
     });
   },
@@ -258,6 +262,18 @@ export const apiClient = {
       headers: authHeaders(token),
       body: JSON.stringify({ status: nextStatus })
     });
+  },
+
+  // Download filtered event history as a CSV blob. Page/page_size params are
+  // stripped because the export always contains the full matching result set.
+  async exportEvents(token: string, filters: EventFilters = {}): Promise<Blob> {
+    const { page: _page, page_size: _pageSize, ...exportFilters } = filters;
+    const url = `${API_BASE_URL}/api/events/export${toQueryString(
+      exportFilters as Record<string, string | number | undefined>
+    )}`;
+    const response = await fetch(url, { headers: authHeaders(token) });
+    if (!response.ok) throw new Error(`Export failed: ${response.status}`);
+    return response.blob();
   }
 };
 

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,15 +8,34 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user
 from app.api.serializers import asset_to_schema, event_to_schema, incident_to_schema
+from app.core.config import settings
 from app.core.database import get_db_session
 from app.domain.enums import IncidentStatus, Severity, UserRole
-from app.domain.models import Asset, Event, Incident, IncidentEvent, User, utc_now
+from app.domain.models import (
+    Asset,
+    Event,
+    Incident,
+    IncidentEvent,
+    IncidentSummaryCache,
+    User,
+    utc_now,
+)
 from app.schemas.ai import IncidentSummaryRead
 from app.schemas.operations import IncidentDetail, IncidentListItem
 from app.services.incident_summary import IncidentSummaryContext, get_incident_summary_provider
 
 
 router = APIRouter(tags=["incidents"])
+
+
+def _to_utc_aware(dt: datetime) -> datetime:
+    """Ensure a datetime is timezone-aware.
+
+    SQLite stores datetimes without timezone info, so values read back from the
+    DB are naive. Coercing to UTC-aware lets us compare them with utc_now(),
+    which is always aware. PostgreSQL is not affected — it returns aware values.
+    """
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def _incident_query():
@@ -46,6 +66,18 @@ def _incident_list_item(incident: Incident) -> IncidentListItem:
         affected_assets=sorted(asset.name for asset in _affected_assets_for_incident(incident)),
         related_event_count=len(incident.event_links),
     )
+
+
+def _delete_summary_cache(incident_id: str, db: Session) -> None:
+    """Remove a cached summary so the next request regenerates from scratch.
+
+    Called when a status change makes the cached prompt context stale — the
+    status field appears in the OpenAI prompt payload, so an outdated cache
+    would surface the pre-transition status label to operators.
+    """
+    cached = db.get(IncidentSummaryCache, incident_id)
+    if cached:
+        db.delete(cached)
 
 
 @router.get("", response_model=list[IncidentListItem])
@@ -108,34 +140,81 @@ def summarize_incident(
     incident_id: str,
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
+    refresh: bool = Query(False, description="Force regeneration, bypassing the DB cache."),
 ) -> IncidentSummaryRead:
-    """Generate or retrieve an operator-facing summary for an incident.
+    """Return an AI-generated summary for an incident, with DB-level caching.
 
-    Phase 1 exposes this as an API capability before the dedicated incident UI
-    lands. The route pulls the incident, linked events, and affected assets, then
-    delegates all AI-specific behavior to the provider interface.
+    Cache hit path (default): check for a non-expired IncidentSummaryCache row
+    and return it immediately without calling the AI provider. The response
+    includes `cached_at` so the frontend can show a staleness badge.
+
+    Cache miss or ?refresh=true path: generate via the provider, upsert the
+    cache row with a new TTL, and return a fresh summary (cached_at is None).
+
+    Status changes invalidate the cache via the PATCH /status endpoint because
+    status appears in the OpenAI prompt — a stale cache would show the wrong
+    status label in the AI output.
     """
 
-    incident = db.scalar(
-        _incident_query().where(Incident.id == incident_id)
-    )
+    incident = db.scalar(_incident_query().where(Incident.id == incident_id))
     if not incident:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Incident not found.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found.")
 
+    # Serve from cache when the entry exists and hasn't expired.
+    if not refresh:
+        cached = db.get(IncidentSummaryCache, incident_id)
+        if cached and _to_utc_aware(cached.expires_at) > utc_now():
+            return IncidentSummaryRead(
+                summary=cached.summary,
+                likely_cause=cached.likely_cause,
+                affected_assets=cached.affected_assets_json,
+                suggested_next_checks=cached.suggested_next_checks_json,
+                provider=cached.provider,
+                cached_at=_to_utc_aware(cached.generated_at),  # signals UI that this is a cache hit
+            )
+
+    # Generate a fresh summary from the AI provider (or deterministic fallback).
     related_events = [link.event for link in incident.event_links if link.event]
     affected_assets = _affected_assets_for_incident(incident)
-
     provider = get_incident_summary_provider()
-    return provider.generate(
+    result = provider.generate(
         IncidentSummaryContext(
             incident=incident,
             related_events=related_events,
             affected_assets=affected_assets,
         )
     )
+
+    # Upsert the cache row — update in place if it already exists so the primary
+    # key stays stable across refreshes. This avoids a delete+insert race.
+    existing = db.get(IncidentSummaryCache, incident_id)
+    ttl = timedelta(minutes=settings.SUMMARY_CACHE_TTL_MINUTES)
+    now = utc_now()
+    if existing:
+        existing.provider = result.provider
+        existing.summary = result.summary
+        existing.likely_cause = result.likely_cause
+        existing.affected_assets_json = result.affected_assets
+        existing.suggested_next_checks_json = result.suggested_next_checks
+        existing.generated_at = now
+        existing.expires_at = now + ttl
+    else:
+        db.add(
+            IncidentSummaryCache(
+                incident_id=incident_id,
+                provider=result.provider,
+                summary=result.summary,
+                likely_cause=result.likely_cause,
+                affected_assets_json=result.affected_assets,
+                suggested_next_checks_json=result.suggested_next_checks,
+                generated_at=now,
+                expires_at=now + ttl,
+            )
+        )
+    db.commit()
+
+    # cached_at is None for fresh generations so the UI shows "live" state.
+    return result
 
 
 class IncidentStatusUpdate(BaseModel):
@@ -161,6 +240,11 @@ def update_incident_status(
     Viewer accounts are read-only; operator and admin roles can update state.
     Tracking who can change status and why is a common system-design talking
     point — this endpoint demonstrates the backend enforcement side.
+
+    The AI summary cache is invalidated on every status change because the
+    status value appears in the OpenAI prompt payload — a cached summary that
+    still says "open" after an operator acknowledges the incident would confuse
+    anyone reading the AI output on the triage workspace.
     """
 
     # Enforce role-based write access — viewers observe but cannot mutate state.
@@ -181,6 +265,11 @@ def update_incident_status(
     # correctly invalidates detail and list views after a mutation.
     incident.status = body.status
     incident.updated_at = utc_now()
+
+    # Invalidate the AI summary cache so the next summary request generates a
+    # fresh response that reflects the new status in the prompt context.
+    _delete_summary_cache(incident_id, db)
+
     db.commit()
     db.refresh(incident)
 

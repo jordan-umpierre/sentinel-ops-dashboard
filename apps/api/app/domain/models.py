@@ -128,3 +128,30 @@ class IncidentEvent(Base):
 
     incident: Mapped["Incident"] = relationship(back_populates="event_links")
     event: Mapped["Event"] = relationship(back_populates="incident_links")
+
+
+class IncidentSummaryCache(Base):
+    """Persisted AI summary for an incident, valid until expires_at.
+
+    Caching avoids re-calling OpenAI on every incident selection, which reduces
+    latency and API cost for the demo. The cache is invalidated explicitly when
+    the incident status changes because status appears in the prompt context and
+    a stale label would mislead operators viewing the AI output.
+
+    TTL is configurable via SUMMARY_CACHE_TTL_MINUTES (default 60 minutes) so
+    it can be shortened for development or extended for stable demo environments.
+    """
+
+    __tablename__ = "incident_summary_cache"
+
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("incidents.id"), primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    likely_cause: Mapped[str] = mapped_column(Text, nullable=False)
+    # JSON columns store Python lists directly; SQLAlchemy handles serialization.
+    affected_assets_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    suggested_next_checks_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

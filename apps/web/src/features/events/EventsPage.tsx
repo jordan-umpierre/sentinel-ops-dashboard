@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ClipboardList, Filter, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardList, Download, Filter, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -29,6 +29,7 @@ export function EventsPage() {
   const [sinceHours, setSinceHours] = useState<EventFilters["since_hours"]>("");
   const [sort, setSort] = useState<EventFilters["sort"]>("newest");
   const [page, setPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
 
   // The assets query powers the asset filter. Reusing the same API client keeps
   // Phase 2 frontend state simple without introducing a global store.
@@ -67,6 +68,27 @@ export function EventsPage() {
     // operator narrows a query that previously had more results.
     update();
     setPage(1);
+  }
+
+  async function handleExport() {
+    // Fetch the CSV as a Blob then trigger a browser download without navigating
+    // away. The Authorization header flows through the API client, which avoids
+    // embedding the JWT in a query parameter that could leak into server logs.
+    if (!token) return;
+    setIsExporting(true);
+    try {
+      const blob = await apiClient.exportEvents(token, filters);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "sentinel-events.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Non-critical — the user can retry; no toast needed for a download failure.
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const pagination = eventsQuery.data?.pagination;
@@ -177,6 +199,16 @@ export function EventsPage() {
               <option value="newest">newest first</option>
               <option value="oldest">oldest first</option>
             </select>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={isExporting}
+              className="inline-flex h-9 items-center gap-2 border border-white/10 bg-white/5 px-3 text-sm text-slate-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              title="Export filtered events as CSV"
+            >
+              <Download className="h-4 w-4" />
+              {isExporting ? "Exporting..." : "Export CSV"}
+            </button>
           </div>
         </div>
 

@@ -94,3 +94,57 @@ class TestEventList:
     def test_requires_auth(self, client: TestClient) -> None:
         resp = client.get("/api/events")
         assert resp.status_code in (401, 403)
+
+
+class TestEventExport:
+    """CSV export endpoint tests.
+
+    The export endpoint accepts the same filter parameters as the list endpoint
+    and returns the full matching set (no pagination) as a downloadable CSV.
+    """
+
+    def test_returns_200_with_csv_content_type(
+        self, client: TestClient, auth_headers: dict
+    ) -> None:
+        resp = client.get("/api/events/export", headers=auth_headers)
+        assert resp.status_code == 200
+        assert "text/csv" in resp.headers["content-type"]
+
+    def test_content_disposition_triggers_download(
+        self, client: TestClient, auth_headers: dict
+    ) -> None:
+        resp = client.get("/api/events/export", headers=auth_headers)
+        assert "attachment" in resp.headers.get("content-disposition", "")
+        assert "sentinel-events.csv" in resp.headers.get("content-disposition", "")
+
+    def test_header_row_has_expected_columns(
+        self, client: TestClient, auth_headers: dict
+    ) -> None:
+        resp = client.get("/api/events/export", headers=auth_headers)
+        lines = resp.text.strip().split("\n")
+        header = lines[0]
+        for col in ("id", "occurred_at", "event_type", "severity", "source", "zone", "message"):
+            assert col in header, f"CSV header missing column: {col}"
+
+    def test_data_rows_are_present(
+        self, client: TestClient, auth_headers: dict
+    ) -> None:
+        resp = client.get("/api/events/export", headers=auth_headers)
+        lines = [line for line in resp.text.strip().split("\n") if line]
+        # At least header + one data row from seeded events.
+        assert len(lines) >= 2
+
+    def test_severity_filter_applies_to_export(
+        self, client: TestClient, auth_headers: dict
+    ) -> None:
+        # Request only critical events; every non-header row should be critical.
+        resp = client.get("/api/events/export?severity=critical", headers=auth_headers)
+        assert resp.status_code == 200
+        lines = resp.text.strip().split("\n")
+        for row in lines[1:]:
+            if row:
+                assert "critical" in row
+
+    def test_export_requires_auth(self, client: TestClient) -> None:
+        resp = client.get("/api/events/export")
+        assert resp.status_code in (401, 403)

@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Clock3,
   ListFilter,
+  RefreshCw,
   RotateCcw,
   Search,
   ShieldAlert,
@@ -80,6 +81,19 @@ export function IncidentsPage() {
       queryClient.invalidateQueries({ queryKey: ["incidents"] });
       queryClient.invalidateQueries({ queryKey: ["incident-detail", selectedIncidentId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-overview"] });
+      // Status change also invalidates the backend summary cache, so clear the
+      // React Query cache too — the next render will fetch a fresh generation.
+      queryClient.removeQueries({ queryKey: ["incident-summary", selectedIncidentId] });
+    }
+  });
+
+  // Summary refresh mutation — calls the backend with ?refresh=true to bypass
+  // the DB cache and writes the fresh result directly into the React Query cache
+  // so the UI updates without a full refetch cycle.
+  const refreshSummaryMutation = useMutation({
+    mutationFn: () => apiClient.getIncidentSummary(token!, selectedIncidentId!, true),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["incident-summary", selectedIncidentId], data);
     }
   });
 
@@ -273,9 +287,23 @@ export function IncidentsPage() {
 
                 <aside className="space-y-5">
                   <section className="border border-white/10 bg-ink-850 p-5 shadow-panel">
-                    <div className="flex items-center gap-2">
-                      <BrainCircuit className="h-4 w-4 text-signal-cyan" />
-                      <h3 className="font-semibold text-white">Incident Summary</h3>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <BrainCircuit className="h-4 w-4 text-signal-cyan" />
+                        <h3 className="font-semibold text-white">Incident Summary</h3>
+                      </div>
+                      {summaryQuery.data && (
+                        <button
+                          type="button"
+                          onClick={() => refreshSummaryMutation.mutate()}
+                          disabled={refreshSummaryMutation.isPending}
+                          className="inline-flex items-center gap-1.5 border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-400 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                          title="Force regenerate summary, bypassing cache"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          {refreshSummaryMutation.isPending ? "Refreshing..." : "Refresh"}
+                        </button>
+                      )}
                     </div>
                     {summaryQuery.isLoading ? (
                       <p className="mt-4 text-sm text-slate-400">Generating summary...</p>
@@ -283,7 +311,14 @@ export function IncidentsPage() {
                       <p className="mt-4 text-sm text-signal-red">Summary provider unavailable.</p>
                     ) : (
                       <div className="mt-4 space-y-4">
-                        <StatusBadge value={summaryQuery.data.provider} tone="cyan" />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusBadge value={summaryQuery.data.provider} tone="cyan" />
+                          {summaryQuery.data.cached_at ? (
+                            <StatusBadge value="cached" tone="neutral" />
+                          ) : (
+                            <StatusBadge value="live" tone="green" />
+                          )}
+                        </div>
                         <p className="text-sm leading-6 text-slate-300">{summaryQuery.data.summary}</p>
                         <div>
                           <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Likely cause</p>

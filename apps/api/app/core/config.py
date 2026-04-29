@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
+    # How long a generated summary stays valid before the next request regenerates it.
+    SUMMARY_CACHE_TTL_MINUTES: int = 60
     SIMULATOR_ENABLED: bool = True
     SIMULATOR_INTERVAL_SECONDS: int = 8
 

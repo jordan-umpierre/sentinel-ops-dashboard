@@ -125,6 +125,97 @@ class TestIncidentSummary:
         assert resp.json()["provider"] == "deterministic-fallback"
 
 
+class TestIncidentSummaryCache:
+    """Tests for the DB-level AI summary cache.
+
+    The cache lifecycle: first request generates + stores, subsequent requests
+    serve from cache (cached_at is set), ?refresh=true bypasses cache, and a
+    status change invalidates the cache so the next request is always fresh.
+    """
+
+    @pytest.fixture(autouse=True)
+    def incident_id(self, client: TestClient, auth_headers: dict) -> str:
+        """Pick the first incident from the list for cache tests."""
+        resp = client.get("/api/incidents", headers=auth_headers)
+        return resp.json()[0]["id"]
+
+    def test_first_request_is_not_cached(
+        self, client: TestClient, auth_headers: dict, incident_id: str
+    ) -> None:
+        # Bypass any stale cache from a previous test run.
+        resp = client.get(
+            f"/api/incidents/{incident_id}/summary?refresh=true", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        # A freshly generated summary has no cached_at timestamp.
+        assert resp.json()["cached_at"] is None
+
+    def test_second_request_is_served_from_cache(
+        self, client: TestClient, auth_headers: dict, incident_id: str
+    ) -> None:
+        # Warm the cache (refresh=true guarantees a fresh write).
+        r1 = client.get(
+            f"/api/incidents/{incident_id}/summary?refresh=true", headers=auth_headers
+        )
+        first_summary = r1.json()["summary"]
+
+        # Normal request should hit the cache.
+        r2 = client.get(
+            f"/api/incidents/{incident_id}/summary", headers=auth_headers
+        )
+        assert r2.status_code == 200
+        assert r2.json()["cached_at"] is not None  # cache hit
+        assert r2.json()["summary"] == first_summary  # same content as cached
+
+    def test_refresh_param_bypasses_cache(
+        self, client: TestClient, auth_headers: dict, incident_id: str
+    ) -> None:
+        # Warm the cache first.
+        client.get(f"/api/incidents/{incident_id}/summary", headers=auth_headers)
+
+        # ?refresh=true must return a fresh generation (cached_at is None).
+        resp = client.get(
+            f"/api/incidents/{incident_id}/summary?refresh=true", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["cached_at"] is None
+
+    def test_status_change_invalidates_summary_cache(
+        self, client: TestClient, auth_headers: dict, incident_id: str
+    ) -> None:
+        # Ensure we start from open so the transition is valid.
+        client.patch(
+            f"/api/incidents/{incident_id}/status",
+            json={"status": "open"},
+            headers=auth_headers,
+        )
+
+        # Warm the cache.
+        r1 = client.get(f"/api/incidents/{incident_id}/summary", headers=auth_headers)
+        # Confirm it's now cached.
+        r2 = client.get(f"/api/incidents/{incident_id}/summary", headers=auth_headers)
+        assert r2.json()["cached_at"] is not None
+
+        # Status change should invalidate the server-side cache.
+        client.patch(
+            f"/api/incidents/{incident_id}/status",
+            json={"status": "acknowledged"},
+            headers=auth_headers,
+        )
+
+        # Next summary request must be a fresh generation (no cached_at).
+        r3 = client.get(f"/api/incidents/{incident_id}/summary", headers=auth_headers)
+        assert r3.status_code == 200
+        assert r3.json()["cached_at"] is None
+
+        # Restore to open so other tests can use this incident.
+        client.patch(
+            f"/api/incidents/{incident_id}/status",
+            json={"status": "open"},
+            headers=auth_headers,
+        )
+
+
 class TestIncidentStatusTransitions:
     """Test the full lifecycle state machine using the seeded incident.
 
