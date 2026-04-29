@@ -7,11 +7,13 @@ import {
   Clock3,
   Map,
   RadioTower,
-  ShieldAlert
+  ShieldAlert,
+  TrendingUp
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+import { ActivitySparkline } from "../../components/ActivitySparkline";
 import { MetricCard } from "../../components/MetricCard";
 import { StatusBadge } from "../../components/StatusBadge";
 import { apiClient } from "../../lib/api";
@@ -28,6 +30,14 @@ export function DashboardPage() {
     queryKey: ["dashboard-overview"],
     queryFn: () => apiClient.getDashboardOverview(token!),
     enabled: Boolean(token)
+  });
+
+  // Activity chart refreshes every 60s. Lightweight — 24 integers from the backend.
+  const activityQuery = useQuery({
+    queryKey: ["event-activity"],
+    queryFn: () => apiClient.getEventActivity(token!),
+    enabled: Boolean(token),
+    refetchInterval: 60_000
   });
 
   if (isLoading) {
@@ -168,6 +178,21 @@ export function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {/* 24-hour event volume sparkline — shows time-series thinking without
+          requiring a charting library; SVG bars built from a 24-slot histogram */}
+      {activityQuery.data && (
+        <section className="border border-white/10 bg-ink-850 p-5 shadow-panel">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Signal Volume</p>
+              <h3 className="mt-2 font-semibold text-white">24-Hour Event Activity</h3>
+            </div>
+            <TrendingUp className="h-4 w-4 text-signal-cyan" />
+          </div>
+          <ActivitySparkline activity={activityQuery.data} />
+        </section>
+      )}
 
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="border border-white/10 bg-ink-850 shadow-panel">

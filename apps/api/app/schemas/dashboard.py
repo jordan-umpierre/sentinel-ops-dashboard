@@ -61,6 +61,25 @@ class IncidentRead(BaseModel):
     related_event_ids: list[str]
 
 
+class HourlyEventBucket(BaseModel):
+    """Event count for a single hour bucket in the 24-hour activity chart."""
+
+    hour: int   # 0-23 (UTC hour)
+    count: int
+
+
+class EventActivityRead(BaseModel):
+    """24-hour event volume breakdown for the dashboard sparkline chart.
+
+    Bucketing is done in Python from a single query so the endpoint works
+    identically against SQLite (local dev) and PostgreSQL (Docker Compose).
+    """
+
+    buckets: list[HourlyEventBucket]
+    total_24h: int
+    peak_hour: int
+
+
 class DashboardMetrics(BaseModel):
     """Aggregated counts that make the first dashboard screen feel alive."""
 

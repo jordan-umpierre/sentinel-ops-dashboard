@@ -148,6 +148,12 @@ export type EventHistoryPage = {
   };
 };
 
+export type EventActivity = {
+  buckets: Array<{ hour: number; count: number }>;
+  total_24h: number;
+  peak_hour: number;
+};
+
 export type LiveEventMessage = {
   message_type: "event.created";
   event: EventRecord;
@@ -237,6 +243,11 @@ export const apiClient = {
   },
   getEvents(token: string, filters: EventFilters = {}) {
     return request<EventHistoryPage>(`/api/events${toQueryString(filters)}`, {
+      headers: authHeaders(token)
+    });
+  },
+  getEventActivity(token: string) {
+    return request<EventActivity>("/api/dashboard/activity", {
       headers: authHeaders(token)
     });
   },

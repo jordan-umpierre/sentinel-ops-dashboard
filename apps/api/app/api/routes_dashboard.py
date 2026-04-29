@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import desc, select
@@ -8,10 +9,12 @@ from app.api.deps import get_current_user
 from app.api.serializers import asset_to_schema, event_to_schema, incident_to_schema
 from app.core.database import get_db_session
 from app.domain.enums import AssetStatus, IncidentStatus, Severity
-from app.domain.models import Asset, Event, Incident, Site, User
+from app.domain.models import Asset, Event, Incident, Site, User, utc_now
 from app.schemas.dashboard import (
     DashboardMetrics,
     DashboardOverview,
+    EventActivityRead,
+    HourlyEventBucket,
     SiteRead,
 )
 
@@ -75,3 +78,36 @@ def get_dashboard_overview(
         incidents=[incident_to_schema(incident) for incident in incidents],
         recent_events=[event_to_schema(event) for event in events],
     )
+
+
+@router.get("/activity", response_model=EventActivityRead)
+def get_event_activity(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> EventActivityRead:
+    """Return a 24-hour hourly event volume breakdown for the dashboard sparkline.
+
+    Bucketing is done in Python after a single date-filtered query so the
+    implementation stays compatible with both SQLite (local dev) and PostgreSQL
+    (Docker). This is worth explaining in an interview: it avoids db-specific
+    date functions like date_trunc (Postgres) vs strftime (SQLite) at the cost
+    of fetching more rows — acceptable at demo scale.
+    """
+
+    cutoff = utc_now() - timedelta(hours=24)
+    events = list(
+        db.scalars(
+            select(Event.occurred_at).where(Event.occurred_at >= cutoff)
+        ).all()
+    )
+
+    # Build a 24-slot histogram indexed by UTC hour (0–23).
+    bucket_counts: dict[int, int] = {h: 0 for h in range(24)}
+    for occurred_at in events:
+        bucket_counts[occurred_at.hour] += 1
+
+    buckets = [HourlyEventBucket(hour=h, count=bucket_counts[h]) for h in range(24)]
+    total = len(events)
+    peak_hour = max(bucket_counts, key=lambda h: bucket_counts[h]) if events else 0
+
+    return EventActivityRead(buckets=buckets, total_24h=total, peak_hour=peak_hour)
