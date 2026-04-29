@@ -25,6 +25,7 @@ export function EventsPage() {
   const [assetId, setAssetId] = useState("");
   const [severity, setSeverity] = useState<EventFilters["severity"]>("");
   const [eventType, setEventType] = useState<EventFilters["event_type"]>("");
+  const [sinceHours, setSinceHours] = useState<EventFilters["since_hours"]>("");
   const [sort, setSort] = useState<EventFilters["sort"]>("newest");
   const [page, setPage] = useState(1);
 
@@ -42,11 +43,12 @@ export function EventsPage() {
       asset_id: assetId,
       severity,
       event_type: eventType,
+      since_hours: sinceHours,
       sort,
       page,
       page_size: 8
     }),
-    [assetId, eventType, page, search, severity, sort]
+    [assetId, eventType, page, search, severity, sinceHours, sort]
   );
   const eventsQuery = useQuery({
     queryKey: ["events", filters],
@@ -78,7 +80,7 @@ export function EventsPage() {
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:w-[780px] xl:grid-cols-[minmax(220px,1fr)_150px_150px_150px]">
+          <div className="grid gap-3 md:grid-cols-2 xl:w-[940px] xl:grid-cols-[minmax(220px,1fr)_140px_140px_160px_140px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
@@ -128,6 +130,22 @@ export function EventsPage() {
                   {value ? value.replace("_", " ") : "all types"}
                 </option>
               ))}
+            </select>
+
+            <select
+              value={sinceHours}
+              onChange={(event) =>
+                resetToFirstPage(() =>
+                  setSinceHours(event.target.value ? Number(event.target.value) : "")
+                )
+              }
+              className="h-11 border border-white/10 bg-ink-950 px-3 text-sm text-white outline-none focus:border-signal-cyan"
+            >
+              <option value="">all time</option>
+              <option value="1">last hour</option>
+              <option value="8">current shift</option>
+              <option value="24">last day</option>
+              <option value="168">last week</option>
             </select>
           </div>
         </div>

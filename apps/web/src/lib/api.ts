@@ -131,6 +131,7 @@ export type EventFilters = {
   asset_id?: string;
   severity?: Severity | "";
   event_type?: EventType | "";
+  since_hours?: number | "";
   sort?: "newest" | "oldest";
   page?: number;
   page_size?: number;

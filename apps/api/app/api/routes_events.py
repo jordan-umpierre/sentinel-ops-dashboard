@@ -1,4 +1,5 @@
 import math
+from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -9,7 +10,7 @@ from app.api.deps import get_current_user
 from app.api.serializers import event_to_schema
 from app.core.database import get_db_session
 from app.domain.enums import EventType, Severity
-from app.domain.models import Asset, Event, User
+from app.domain.models import Asset, Event, User, utc_now
 from app.schemas.operations import EventHistoryPage, PaginationMeta
 
 
@@ -24,6 +25,7 @@ def list_events(
     asset_id: str = "",
     severity: Optional[Severity] = None,
     event_type: Optional[EventType] = None,
+    since_hours: int = Query(0, ge=0, le=168),
     sort: str = Query("newest", pattern="^(newest|oldest)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
@@ -51,6 +53,10 @@ def list_events(
         query = query.where(Event.severity == severity)
     if event_type:
         query = query.where(Event.event_type == event_type)
+    if since_hours:
+        # Time-window filtering lets operators quickly answer "what happened
+        # during this shift?" without losing the full immutable event history.
+        query = query.where(Event.occurred_at >= utc_now() - timedelta(hours=since_hours))
 
     total = db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
     order_by = desc(Event.occurred_at) if sort == "newest" else asc(Event.occurred_at)
