@@ -21,6 +21,11 @@ class EventConnectionManager:
         await websocket.accept()
         self.active_connections.append(websocket)
 
+    def register(self, websocket: WebSocket) -> None:
+        """Register an already-accepted websocket without calling accept() again."""
+
+        self.active_connections.append(websocket)
+
     def disconnect(self, websocket: WebSocket) -> None:
         """Remove a websocket connection if the browser disconnects."""
 

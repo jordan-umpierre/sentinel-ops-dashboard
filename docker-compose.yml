@@ -20,7 +20,7 @@ services:
       context: ./apps/api
     environment:
       DATABASE_URL: postgresql+psycopg://sentinel:sentinel@db:5432/sentinel
-      JWT_SECRET_KEY: change-me-for-local-development
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY before running. Generate one with: openssl rand -hex 32}
       CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}

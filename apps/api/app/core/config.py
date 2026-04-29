@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Sentinel API"
     API_VERSION: str = "0.1.0"
     DATABASE_URL: str = "sqlite:///./sentinel-dev.db"
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str  # required — generate with: openssl rand -hex 32
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 8
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

@@ -24,9 +24,12 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
 
     function connect(nextStatus: ConnectionStatus = "connecting") {
       setConnectionStatus(nextStatus);
-      socket = new WebSocket(liveEventsUrl(token!));
+      socket = new WebSocket(liveEventsUrl());
 
       socket.onopen = () => {
+        // Send token as first frame — keeps the bearer credential out of the
+        // WebSocket upgrade URL and therefore out of server access logs.
+        socket!.send(JSON.stringify({ type: "auth", token: token! }));
         setConnectionStatus("live");
       };
 
@@ -46,9 +49,10 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
         queryClient.invalidateQueries({ queryKey: ["incident-detail"] });
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         socket = null;
-        if (!shouldReconnect.current) {
+        // 1008 = Policy Violation (auth rejected by server) — stop reconnecting.
+        if (!shouldReconnect.current || event.code === 1008) {
           setConnectionStatus("offline");
           return;
         }

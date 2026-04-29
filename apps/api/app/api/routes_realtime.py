@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import JWTError
 from sqlalchemy import select
@@ -10,15 +13,11 @@ from app.services.realtime import event_connection_manager
 
 router = APIRouter(tags=["realtime"])
 
+_AUTH_TIMEOUT_SECONDS = 5
 
-def _token_belongs_to_user(token: str) -> bool:
-    """Validate websocket query-token auth for browser clients.
 
-    Browsers cannot attach arbitrary Authorization headers to native WebSocket
-    connections, so the frontend passes the existing JWT as a query parameter.
-    The token is still validated against the users table before the socket is
-    accepted.
-    """
+def _resolve_user_from_token(token: str) -> bool:
+    """Validate the JWT and confirm the user still exists in the database."""
 
     try:
         payload = decode_access_token(token)
@@ -37,17 +36,33 @@ def _token_belongs_to_user(token: str) -> bool:
 
 
 @router.websocket("/events")
-async def stream_events(websocket: WebSocket, token: str = "") -> None:
-    """Stream simulator events to authenticated dashboard clients."""
+async def stream_events(websocket: WebSocket) -> None:
+    """Stream simulator events to authenticated dashboard clients.
 
-    if not token or not _token_belongs_to_user(token):
+    Authentication uses a first-frame handshake so the bearer token is never
+    written to web server access logs or browser history. The client must send
+    {"type": "auth", "token": "<JWT>"} within 5 s of opening the connection;
+    the server closes with code 1008 if the frame is missing or invalid.
+    """
+
+    await websocket.accept()
+
+    try:
+        raw = await asyncio.wait_for(
+            websocket.receive_text(), timeout=_AUTH_TIMEOUT_SECONDS
+        )
+        frame = json.loads(raw)
+        token = frame.get("token", "") if isinstance(frame, dict) else ""
+    except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
         await websocket.close(code=1008)
         return
 
-    await event_connection_manager.connect(websocket)
+    if not token or not _resolve_user_from_token(token):
+        await websocket.close(code=1008)
+        return
+
+    event_connection_manager.register(websocket)
     try:
-        # The server owns event delivery. This receive loop simply keeps the
-        # connection alive and lets the browser close it naturally.
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:

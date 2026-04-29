@@ -277,8 +277,6 @@ export const apiClient = {
   }
 };
 
-export function liveEventsUrl(token: string) {
-  // Browser WebSocket APIs cannot attach Authorization headers, so the backend
-  // validates the same JWT through a query parameter before accepting the socket.
-  return `${WS_BASE_URL}/api/realtime/events?token=${encodeURIComponent(token)}`;
+export function liveEventsUrl() {
+  return `${WS_BASE_URL}/api/realtime/events`;
 }

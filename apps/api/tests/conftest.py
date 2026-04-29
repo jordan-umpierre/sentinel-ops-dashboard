@@ -13,6 +13,7 @@ import os
 # dedicated test file so tests never touch the dev database.
 os.environ["DATABASE_URL"] = "sqlite:///./tests/sentinel-test.db"
 os.environ["SIMULATOR_ENABLED"] = "false"
+os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-not-for-production-use-32x")
 
 import pytest
 from fastapi.testclient import TestClient
