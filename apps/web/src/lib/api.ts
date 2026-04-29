@@ -73,6 +73,19 @@ export type AssetDetail = Asset & {
   related_incidents: IncidentListItem[];
 };
 
+export type IncidentDetail = IncidentListItem & {
+  related_events: EventRecord[];
+  affected_asset_details: Asset[];
+};
+
+export type IncidentSummary = {
+  summary: string;
+  likely_cause: string;
+  affected_assets: string[];
+  suggested_next_checks: string[];
+  provider: string;
+};
+
 export type DashboardOverview = {
   site: {
     id: string;
@@ -98,6 +111,12 @@ export type AssetFilters = {
   status?: AssetStatus | "";
   asset_type?: AssetType | "";
   sort?: "name" | "status" | "battery" | "last_seen";
+};
+
+export type IncidentFilters = {
+  search?: string;
+  status?: IncidentStatus | "";
+  severity?: Severity | "";
 };
 
 function toQueryString(params: Record<string, string | number | undefined>) {
@@ -161,6 +180,21 @@ export const apiClient = {
   },
   getAssetDetail(token: string, assetId: string) {
     return request<AssetDetail>(`/api/assets/${assetId}`, {
+      headers: authHeaders(token)
+    });
+  },
+  getIncidents(token: string, filters: IncidentFilters = {}) {
+    return request<IncidentListItem[]>(`/api/incidents${toQueryString(filters)}`, {
+      headers: authHeaders(token)
+    });
+  },
+  getIncidentDetail(token: string, incidentId: string) {
+    return request<IncidentDetail>(`/api/incidents/${incidentId}`, {
+      headers: authHeaders(token)
+    });
+  },
+  getIncidentSummary(token: string, incidentId: string) {
+    return request<IncidentSummary>(`/api/incidents/${incidentId}/summary`, {
       headers: authHeaders(token)
     });
   }

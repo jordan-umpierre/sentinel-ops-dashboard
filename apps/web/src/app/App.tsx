@@ -5,6 +5,7 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import { AssetsPage } from "../features/assets/AssetsPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
+import { IncidentsPage } from "../features/incidents/IncidentsPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -33,7 +34,7 @@ export function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="assets" element={<AssetsPage />} />
-        <Route path="incidents" element={<PlaceholderPage title="Incidents" />} />
+        <Route path="incidents" element={<IncidentsPage />} />
         <Route path="site" element={<PlaceholderPage title="Site View" />} />
         <Route path="events" element={<PlaceholderPage title="Event History" />} />
       </Route>
