@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./AppShell";
 import { ProtectedRoute } from "./ProtectedRoute";
+import { AssetsPage } from "../features/assets/AssetsPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 
@@ -31,7 +32,7 @@ export function App() {
         }
       >
         <Route index element={<DashboardPage />} />
-        <Route path="assets" element={<PlaceholderPage title="Assets" />} />
+        <Route path="assets" element={<AssetsPage />} />
         <Route path="incidents" element={<PlaceholderPage title="Incidents" />} />
         <Route path="site" element={<PlaceholderPage title="Site View" />} />
         <Route path="events" element={<PlaceholderPage title="Event History" />} />
