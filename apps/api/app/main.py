@@ -9,9 +9,12 @@ from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_events import router as events_router
 from app.api.routes_health import router as health_router
 from app.api.routes_incidents import router as incidents_router
+from app.api.routes_realtime import router as realtime_router
 from app.core.config import settings
 from app.core.database import Base, engine
+from app.services.realtime import event_connection_manager
 from app.services.seed import seed_demo_data
+from app.simulation.generator import EventSimulator
 
 
 @asynccontextmanager
@@ -26,7 +29,11 @@ async def lifespan(app: FastAPI):
 
     Base.metadata.create_all(bind=engine)
     seed_demo_data()
+    simulator = EventSimulator(event_connection_manager)
+    if settings.SIMULATOR_ENABLED:
+        simulator.start()
     yield
+    await simulator.stop()
 
 
 def create_app() -> FastAPI:
@@ -62,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(assets_router, prefix="/api/assets")
     app.include_router(events_router, prefix="/api/events")
     app.include_router(incidents_router, prefix="/api/incidents")
+    app.include_router(realtime_router, prefix="/api/realtime")
     return app
 
 

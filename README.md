@@ -32,6 +32,7 @@ Phase 1 is implemented as a runnable foundation:
 - Protected React app shell with route navigation
 - Main dashboard consuming `/api/dashboard/overview`
 - Incident summary provider at `/api/incidents/{incident_id}/summary`
+- In-process realtime simulator with websocket stream at `/api/realtime/events`
 
 ## Run With Docker
 

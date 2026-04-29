@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-5.2"
+    SIMULATOR_ENABLED: bool = True
+    SIMULATOR_INTERVAL_SECONDS: int = 8
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
