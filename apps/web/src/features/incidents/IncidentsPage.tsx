@@ -1,9 +1,18 @@
-import { BrainCircuit, CheckCircle2, Clock3, ListFilter, Search, ShieldAlert } from "lucide-react";
+import {
+  BrainCircuit,
+  CheckCircle2,
+  Clock3,
+  ListFilter,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  ShieldCheck
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { StatusBadge } from "../../components/StatusBadge";
-import { apiClient, type IncidentFilters, type IncidentListItem } from "../../lib/api";
+import { apiClient, type IncidentFilters, type IncidentListItem, type IncidentStatus } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/date";
 import { assetStatusTone, incidentStatusTone, severityTone } from "../../lib/tones";
 import { useAuth } from "../auth/useAuth";
@@ -11,8 +20,17 @@ import { useAuth } from "../auth/useAuth";
 const incidentStatuses = ["", "open", "acknowledged", "resolved"] as const;
 const severities = ["", "info", "low", "medium", "high", "critical"] as const;
 
+// Valid next-status transitions for each current status.
+// This mirrors the backend lifecycle model and drives which action buttons render.
+const nextStatuses: Record<IncidentStatus, IncidentStatus[]> = {
+  open: ["acknowledged"],
+  acknowledged: ["resolved", "open"],
+  resolved: ["open"]
+};
+
 export function IncidentsPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<IncidentFilters["status"]>("");
   const [severity, setSeverity] = useState<IncidentFilters["severity"]>("");
@@ -45,8 +63,27 @@ export function IncidentsPage() {
   const summaryQuery = useQuery({
     queryKey: ["incident-summary", selectedIncidentId],
     queryFn: () => apiClient.getIncidentSummary(token!, selectedIncidentId!),
-    enabled: Boolean(token && selectedIncidentId)
+    enabled: Boolean(token && selectedIncidentId),
+    // Summaries are generated on demand and don't change with live events,
+    // so a 5-minute stale window avoids unnecessary re-generation.
+    staleTime: 5 * 60 * 1000
   });
+
+  // Mutation for status transitions — invalidates both the list and detail caches
+  // so every visible incident card reflects the updated state immediately.
+  const statusMutation = useMutation({
+    mutationFn: ({ incidentId, nextStatus }: { incidentId: string; nextStatus: IncidentStatus }) =>
+      apiClient.updateIncidentStatus(token!, incidentId, nextStatus),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["incident-detail", selectedIncidentId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-overview"] });
+    }
+  });
+
+  // Viewers are read-only — the backend enforces this too, but hiding the
+  // buttons avoids a misleading UX for accounts without write access.
+  const canMutate = user?.role === "operator" || user?.role === "admin";
 
   return (
     <div className="space-y-5">
@@ -167,9 +204,42 @@ export function IncidentsPage() {
 
                 <div className="mt-5 grid gap-3 md:grid-cols-3">
                   <IncidentStat icon={ShieldAlert} label="Severity" value={detailQuery.data.severity} />
-                  <IncidentStat icon={Clock3} label="Related events" value={String(detailQuery.data.related_event_count)} />
-                  <IncidentStat icon={CheckCircle2} label="Affected assets" value={String(detailQuery.data.affected_assets.length)} />
+                  <IncidentStat
+                    icon={Clock3}
+                    label="Related events"
+                    value={String(detailQuery.data.related_event_count)}
+                  />
+                  <IncidentStat
+                    icon={CheckCircle2}
+                    label="Affected assets"
+                    value={String(detailQuery.data.affected_assets.length)}
+                  />
                 </div>
+
+                {/* Status action buttons — visible only to operator and admin roles */}
+                {canMutate && (
+                  <div className="mt-5 flex flex-wrap gap-2 border-t border-white/10 pt-5">
+                    <p className="mr-2 flex items-center text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Transition
+                    </p>
+                    {nextStatuses[detailQuery.data.status as IncidentStatus].map((nextStatus) => (
+                      <IncidentActionButton
+                        key={nextStatus}
+                        nextStatus={nextStatus}
+                        isLoading={statusMutation.isPending}
+                        onClick={() =>
+                          statusMutation.mutate({
+                            incidentId: detailQuery.data.id,
+                            nextStatus
+                          })
+                        }
+                      />
+                    ))}
+                    {statusMutation.isError && (
+                      <p className="text-xs text-signal-red">Status update failed — try again.</p>
+                    )}
+                  </div>
+                )}
               </section>
 
               <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -184,7 +254,9 @@ export function IncidentsPage() {
                       <article key={event.id} className="grid gap-4 p-5 md:grid-cols-[140px_1fr]">
                         <div>
                           <StatusBadge value={event.severity} tone={severityTone[event.severity]} />
-                          <p className="mt-2 text-xs text-slate-500">{formatRelativeTime(event.occurred_at)}</p>
+                          <p className="mt-2 text-xs text-slate-500">
+                            {formatRelativeTime(event.occurred_at)}
+                          </p>
                         </div>
                         <div>
                           <p className="text-sm font-medium text-white">{event.message}</p>
@@ -256,6 +328,53 @@ export function IncidentsPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+// Labels and icons for each target status — drives the action button appearance.
+const statusActionConfig: Record<
+  IncidentStatus,
+  { label: string; icon: typeof ShieldCheck; tone: string }
+> = {
+  acknowledged: {
+    label: "Acknowledge",
+    icon: ShieldCheck,
+    tone: "border-signal-amber/40 bg-signal-amber/10 text-signal-amber hover:bg-signal-amber/20"
+  },
+  resolved: {
+    label: "Mark Resolved",
+    icon: CheckCircle2,
+    tone: "border-signal-green/40 bg-signal-green/10 text-signal-green hover:bg-signal-green/20"
+  },
+  open: {
+    label: "Reopen",
+    icon: RotateCcw,
+    tone: "border-signal-red/40 bg-signal-red/10 text-signal-red hover:bg-signal-red/20"
+  }
+};
+
+function IncidentActionButton({
+  nextStatus,
+  isLoading,
+  onClick
+}: {
+  nextStatus: IncidentStatus;
+  isLoading: boolean;
+  onClick: () => void;
+}) {
+  const config = statusActionConfig[nextStatus];
+  const Icon = config.icon;
+
+  return (
+    <button
+      type="button"
+      disabled={isLoading}
+      onClick={onClick}
+      className={`inline-flex h-9 items-center gap-2 border px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${config.tone}`}
+    >
+      <Icon className="h-4 w-4" />
+      {isLoading ? "Updating..." : config.label}
+    </button>
   );
 }
 

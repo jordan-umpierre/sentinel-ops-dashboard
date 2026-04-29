@@ -66,14 +66,28 @@ class FallbackIncidentSummaryProvider(IncidentSummaryProvider):
 
 
 class OpenAIIncidentSummaryProvider(IncidentSummaryProvider):
-    """OpenAI Responses API implementation for incident summaries.
+    """OpenAI Chat Completions implementation for incident summaries.
 
-    The provider requests JSON-like output from the model and validates it before
-    returning data to the route. Any API or parsing failure falls back to the
-    deterministic provider so the application remains runnable without drama.
+    Uses JSON mode to guarantee parseable output, then validates the response
+    before returning data to the route. Any API or parsing failure falls back to
+    the deterministic provider so the application remains runnable without drama.
+
+    The provider interface makes swapping models or adding caching trivial — a key
+    talking point when explaining the AI layer during a technical interview.
     """
 
     provider_name = "openai"
+
+    # System prompt instructs the model to return strictly structured JSON so the
+    # response can be parsed without brittle regex or schema inference.
+    _SYSTEM_PROMPT = (
+        "You are an operational incident analyst for a secure logistics facility. "
+        "Given a structured incident payload, return ONLY valid JSON with exactly these keys: "
+        "summary (string), likely_cause (string), affected_assets (array of strings), "
+        "suggested_next_checks (array of strings). "
+        "Use concise, practical language appropriate for a live operational dashboard. "
+        "Do not include any text outside the JSON object."
+    )
 
     def __init__(self, fallback_provider: IncidentSummaryProvider) -> None:
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -81,17 +95,23 @@ class OpenAIIncidentSummaryProvider(IncidentSummaryProvider):
 
     def generate(self, context: IncidentSummaryContext) -> IncidentSummaryRead:
         try:
-            response = self.client.responses.create(
+            # response_format=json_object enforces valid JSON output without
+            # custom parsing — cleaner than prompt-only JSON constraints.
+            response = self.client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
-                instructions=(
-                    "You are an operational incident analyst. Return only compact JSON "
-                    "with keys: summary, likely_cause, affected_assets, suggested_next_checks. "
-                    "Use concise, practical language for a site operations dashboard."
-                ),
-                input=json.dumps(_context_to_prompt_payload(context)),
-                max_output_tokens=500,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": self._SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": json.dumps(_context_to_prompt_payload(context)),
+                    },
+                ],
+                max_tokens=500,
+                temperature=0.3,  # low temperature keeps summaries consistent across demos
             )
-            parsed = json.loads(response.output_text)
+
+            parsed = json.loads(response.choices[0].message.content or "{}")
             return IncidentSummaryRead(
                 summary=str(parsed["summary"]),
                 likely_cause=str(parsed["likely_cause"]),
@@ -100,6 +120,8 @@ class OpenAIIncidentSummaryProvider(IncidentSummaryProvider):
                 provider=self.provider_name,
             )
         except Exception:
+            # Any API error, network timeout, or unexpected JSON shape gracefully
+            # degrades to the deterministic provider rather than surfacing a 500.
             return self.fallback_provider.generate(context)
 
 
@@ -120,7 +142,11 @@ def _asset_names(assets: Iterable[Asset]) -> list[str]:
 
 
 def _context_to_prompt_payload(context: IncidentSummaryContext) -> dict:
-    """Build the compact incident payload sent to OpenAI."""
+    """Build the compact incident payload sent to OpenAI.
+
+    Keeping the payload small reduces token cost while including enough signal
+    for the model to produce a useful summary and next-step recommendations.
+    """
 
     return {
         "incident": {

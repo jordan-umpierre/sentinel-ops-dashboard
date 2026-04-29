@@ -1,12 +1,21 @@
-import { MapPin, RadioTower, ScanLine, ShieldAlert } from "lucide-react";
+import { RadioTower, ScanLine, Server, ShieldAlert, Truck, User, Wifi } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { StatusBadge } from "../../components/StatusBadge";
-import { apiClient, type Asset } from "../../lib/api";
+import { apiClient, type Asset, type AssetType } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/date";
 import { assetStatusTone } from "../../lib/tones";
 import { useAuth } from "../auth/useAuth";
+
+// Each asset type gets a distinct icon so operators can scan the facility plan
+// without reading labels — matching the visual vocabulary of real ops dashboards.
+const assetTypeIcon: Record<AssetType, typeof User> = {
+  personnel: User,
+  vehicle: Truck,
+  sensor: Wifi,
+  gateway: Server
+};
 
 const zones = [
   { name: "North Gate", className: "left-[56%] top-[8%] h-[22%] w-[32%]" },
@@ -113,6 +122,10 @@ export function SitePage() {
               assetsQuery.data.map((asset) => {
                 const position = normalizeAssetPosition(asset, assetsQuery.data);
                 const isSelected = asset.id === selectedAssetId;
+                const isAlert = asset.status === "alert" || asset.status === "offline";
+                // Each asset type gets a distinct icon so operators can quickly
+                // identify entity class without reading the label on click.
+                const AssetIcon = assetTypeIcon[asset.asset_type];
                 return (
                   <button
                     key={asset.id}
@@ -121,13 +134,15 @@ export function SitePage() {
                     className={`absolute grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center border transition ${
                       isSelected
                         ? "border-signal-cyan bg-signal-cyan text-ink-950"
+                        : isAlert
+                        ? "border-signal-red/60 bg-signal-red/10 text-signal-red hover:border-signal-red"
                         : "border-white/20 bg-ink-950 text-slate-200 hover:border-signal-cyan"
                     }`}
                     style={{ left: `${position.x}%`, top: `${position.y}%` }}
                     aria-label={`Inspect ${asset.name}`}
-                    title={asset.name}
+                    title={`${asset.name} (${asset.asset_type})`}
                   >
-                    <MapPin className="h-5 w-5" />
+                    <AssetIcon className="h-5 w-5" />
                   </button>
                 );
               })

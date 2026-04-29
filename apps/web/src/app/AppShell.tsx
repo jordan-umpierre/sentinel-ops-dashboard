@@ -1,6 +1,7 @@
 import { Activity, Bell, Boxes, ClipboardList, LayoutDashboard, LogOut, Map, Radio } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 
+import { LiveEventToast } from "../components/LiveEventToast";
 import { useAuth } from "../features/auth/useAuth";
 import { LiveEventsProvider } from "../features/realtime/LiveEventsContext";
 import { useLiveEvents } from "../features/realtime/useLiveEvents";
@@ -23,7 +24,9 @@ export function AppShell() {
 
 function AppShellContent() {
   const { user, logout } = useAuth();
-  const { connectionStatus } = useLiveEvents();
+  const { connectionStatus, liveEvents } = useLiveEvents();
+  // Always pass the most recent live event so the toast reacts to new arrivals.
+  const latestEvent = liveEvents[0] ?? null;
 
   return (
     <div className="min-h-screen bg-ink-950 text-slate-100">
@@ -125,6 +128,10 @@ function AppShellContent() {
           </main>
         </div>
       </div>
+
+      {/* Portal-style toast rendered outside the scroll container so it always
+          appears at the viewport bottom-right regardless of scroll position */}
+      <LiveEventToast latestEvent={latestEvent} />
     </div>
   );
 }
@@ -141,7 +148,13 @@ function LiveStatus({ status }: { status: string }) {
       }`}
       title="Realtime simulator connection"
     >
-      <span className={`h-2 w-2 ${isLive ? "bg-signal-green" : "bg-signal-amber"}`} />
+      {/* Pulsing dot gives operators an immediate at-a-glance signal that the
+          stream is alive, without requiring them to watch the event feed */}
+      <span
+        className={`h-2 w-2 ${
+          isLive ? "animate-status-pulse bg-signal-green" : "bg-signal-amber"
+        }`}
+      />
       {status}
     </div>
   );

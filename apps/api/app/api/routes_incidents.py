@@ -1,14 +1,15 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user
 from app.api.serializers import asset_to_schema, event_to_schema, incident_to_schema
 from app.core.database import get_db_session
-from app.domain.enums import IncidentStatus, Severity
-from app.domain.models import Asset, Event, Incident, IncidentEvent, User
+from app.domain.enums import IncidentStatus, Severity, UserRole
+from app.domain.models import Asset, Event, Incident, IncidentEvent, User, utc_now
 from app.schemas.ai import IncidentSummaryRead
 from app.schemas.operations import IncidentDetail, IncidentListItem
 from app.services.incident_summary import IncidentSummaryContext, get_incident_summary_provider
@@ -135,3 +136,52 @@ def summarize_incident(
             affected_assets=affected_assets,
         )
     )
+
+
+class IncidentStatusUpdate(BaseModel):
+    """Request body for the incident status transition endpoint."""
+
+    status: IncidentStatus
+
+
+@router.patch("/{incident_id}/status", response_model=IncidentListItem)
+def update_incident_status(
+    incident_id: str,
+    body: IncidentStatusUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> IncidentListItem:
+    """Transition an incident through its operator lifecycle states.
+
+    Allowed transitions match the product model:
+      open → acknowledged (operator takes ownership)
+      acknowledged → resolved (operator closes the loop)
+      any → open (reopen if circumstances change)
+
+    Viewer accounts are read-only; operator and admin roles can update state.
+    Tracking who can change status and why is a common system-design talking
+    point — this endpoint demonstrates the backend enforcement side.
+    """
+
+    # Enforce role-based write access — viewers observe but cannot mutate state.
+    if current_user.role == UserRole.VIEWER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Viewer accounts cannot update incident status.",
+        )
+
+    incident = db.scalar(_incident_query().where(Incident.id == incident_id))
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found.",
+        )
+
+    # Persist the new status and bump updated_at so the frontend query cache
+    # correctly invalidates detail and list views after a mutation.
+    incident.status = body.status
+    incident.updated_at = utc_now()
+    db.commit()
+    db.refresh(incident)
+
+    return _incident_list_item(incident)

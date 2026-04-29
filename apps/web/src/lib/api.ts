@@ -239,6 +239,14 @@ export const apiClient = {
     return request<EventHistoryPage>(`/api/events${toQueryString(filters)}`, {
       headers: authHeaders(token)
     });
+  },
+  // Incident status transitions — operator/admin only; viewer role returns 403.
+  updateIncidentStatus(token: string, incidentId: string, nextStatus: IncidentStatus) {
+    return request<IncidentListItem>(`/api/incidents/${incidentId}/status`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ status: nextStatus })
+    });
   }
 };
 
