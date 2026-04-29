@@ -2,9 +2,11 @@ import { BatteryCharging, Filter, Radar, Search, Signal, X } from "lucide-react"
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { AssetDetailSkeleton, TableRowSkeleton } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { apiClient, type Asset, type AssetFilters } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/date";
+import { useDebounce } from "../../lib/useDebounce";
 import { assetStatusTone, incidentStatusTone, severityTone } from "../../lib/tones";
 import { useAuth } from "../auth/useAuth";
 
@@ -26,11 +28,14 @@ export function AssetsPage() {
   const [sort, setSort] = useState<AssetFilters["sort"]>("name");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
 
-  // The list query owns operator-controlled filters. Keeping each filter in the
-  // query key makes React Query cache predictable as users pivot between views.
+  // Debounce the search string so the API is queried only after the user pauses
+  // typing, not on every keystroke. The other filter fields change via select
+  // (discrete events) and don't need debouncing.
+  const debouncedSearch = useDebounce(search, 300);
+
   const filters = useMemo<AssetFilters>(
-    () => ({ search, status, asset_type: assetType, sort }),
-    [assetType, search, sort, status]
+    () => ({ search: debouncedSearch, status, asset_type: assetType, sort }),
+    [assetType, debouncedSearch, sort, status]
   );
   const assetsQuery = useQuery({
     queryKey: ["assets", filters],
@@ -124,7 +129,13 @@ export function AssetsPage() {
           </div>
 
           {assetsQuery.isLoading ? (
-            <div className="p-6 text-sm text-slate-400">Loading assets...</div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-white/10 text-sm">
+                <tbody className="divide-y divide-white/10">
+                  {Array.from({ length: 5 }).map((_, i) => <TableRowSkeleton key={i} cols={6} />)}
+                </tbody>
+              </table>
+            </div>
           ) : assetsQuery.isError ? (
             <div className="p-6 text-sm text-signal-red">Asset records are unavailable.</div>
           ) : assetsQuery.data?.length ? (
@@ -178,7 +189,7 @@ export function AssetsPage() {
           {!selectedAssetId ? (
             <div className="p-5 text-sm text-slate-400">Select an asset to inspect state and history.</div>
           ) : detailQuery.isLoading ? (
-            <div className="p-5 text-sm text-slate-400">Loading asset detail...</div>
+            <AssetDetailSkeleton />
           ) : detailQuery.isError || !detailQuery.data ? (
             <div className="p-5 text-sm text-signal-red">Asset detail is unavailable.</div>
           ) : (

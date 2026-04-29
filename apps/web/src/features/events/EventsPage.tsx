@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { StatusBadge } from "../../components/StatusBadge";
 import { apiClient, type EventFilters } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/date";
+import { useDebounce } from "../../lib/useDebounce";
 import { severityTone } from "../../lib/tones";
 import { useAuth } from "../auth/useAuth";
 
@@ -37,9 +38,14 @@ export function EventsPage() {
     enabled: Boolean(token)
   });
 
+  // Debounce the free-text search; the select-based filters are discrete and
+  // don't need it. Pagination resets to page 1 only on user-initiated changes
+  // (handled in the onChange callbacks), not when the debounce fires.
+  const debouncedSearch = useDebounce(search, 300);
+
   const filters = useMemo<EventFilters>(
     () => ({
-      search,
+      search: debouncedSearch,
       asset_id: assetId,
       severity,
       event_type: eventType,
@@ -48,7 +54,7 @@ export function EventsPage() {
       page,
       page_size: 8
     }),
-    [assetId, eventType, page, search, severity, sinceHours, sort]
+    [assetId, debouncedSearch, eventType, page, severity, sinceHours, sort]
   );
   const eventsQuery = useQuery({
     queryKey: ["events", filters],

@@ -11,9 +11,11 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { IncidentDetailSkeleton, IncidentRowSkeleton } from "../../components/Skeleton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { apiClient, type IncidentFilters, type IncidentListItem, type IncidentStatus } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/date";
+import { useDebounce } from "../../lib/useDebounce";
 import { assetStatusTone, incidentStatusTone, severityTone } from "../../lib/tones";
 import { useAuth } from "../auth/useAuth";
 
@@ -36,11 +38,11 @@ export function IncidentsPage() {
   const [severity, setSeverity] = useState<IncidentFilters["severity"]>("");
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
 
-  // Filters live in the query key so list state is shareable and easy to reason
-  // about when explaining the frontend data flow in an interview.
+  const debouncedSearch = useDebounce(search, 300);
+
   const filters = useMemo<IncidentFilters>(
-    () => ({ search, status, severity }),
-    [search, severity, status]
+    () => ({ search: debouncedSearch, status, severity }),
+    [debouncedSearch, severity, status]
   );
   const incidentsQuery = useQuery({
     queryKey: ["incidents", filters],
@@ -147,7 +149,9 @@ export function IncidentsPage() {
           </div>
 
           {incidentsQuery.isLoading ? (
-            <div className="p-5 text-sm text-slate-400">Loading incidents...</div>
+            <div className="divide-y divide-white/10">
+              {Array.from({ length: 4 }).map((_, i) => <IncidentRowSkeleton key={i} />)}
+            </div>
           ) : incidentsQuery.isError ? (
             <div className="p-5 text-sm text-signal-red">Incident records are unavailable.</div>
           ) : incidentsQuery.data?.length ? (
@@ -170,9 +174,7 @@ export function IncidentsPage() {
 
         <div className="space-y-5">
           {detailQuery.isLoading ? (
-            <div className="border border-white/10 bg-ink-850 p-6 text-sm text-slate-400 shadow-panel">
-              Loading incident detail...
-            </div>
+            <IncidentDetailSkeleton />
           ) : detailQuery.isError || !detailQuery.data ? (
             <div className="border border-signal-red/30 bg-signal-red/10 p-5 text-sm text-signal-red">
               Select an incident to inspect the triage packet.

@@ -63,3 +63,20 @@ input:focus-visible {
 .animate-status-pulse {
   animation: status-pulse 1.8s ease-in-out infinite;
 }
+
+/* Skeleton shimmer — sweeps a gradient across placeholder blocks */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+.animate-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
