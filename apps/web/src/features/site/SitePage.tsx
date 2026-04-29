@@ -1,6 +1,6 @@
 import L from "leaflet";
-import { RadioTower, ScanLine, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, RadioTower, ScanLine, ShieldAlert } from "lucide-react";
+import { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Circle, MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import { useQuery } from "@tanstack/react-query";
 
@@ -153,8 +153,10 @@ export function SitePage() {
             <StatusBadge value="live telemetry" tone="cyan" />
           </div>
 
-          {/* MapContainer must have an explicit height; flex-1 doesn't work inside
-              Leaflet's internal sizing. 560px matches the old facility plan height. */}
+          {/* MapErrorBoundary catches Leaflet tile failures, WebGL unavailability,
+              and any other map-layer exception so a single bad render can't take
+              down the entire ops console. The fallback keeps the sidebar usable. */}
+          <MapErrorBoundary>
           <MapContainer
             center={[41.881, -87.63]}
             zoom={15}
@@ -205,6 +207,7 @@ export function SitePage() {
               />
             ))}
           </MapContainer>
+          </MapErrorBoundary>
         </div>
 
         <aside className="border border-white/10 bg-ink-850 shadow-panel">
@@ -263,6 +266,47 @@ export function SitePage() {
       </section>
     </div>
   );
+}
+
+// React error boundaries must be class components — hooks can't catch render errors.
+// This boundary is scoped to the map so a Leaflet failure (bad tile URL, WebGL
+// context lost, react-leaflet version mismatch) can't crash the whole ops console.
+class MapErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          className="grid place-items-center border border-signal-red/30 bg-signal-red/5 text-center"
+          style={{ height: "560px" }}
+        >
+          <div className="space-y-3">
+            <AlertTriangle className="mx-auto h-8 w-8 text-signal-red/60" />
+            <p className="text-sm font-medium text-signal-red">Map renderer failed to load</p>
+            <p className="text-xs text-slate-500">
+              Asset state is still available in the Assets page.
+            </p>
+            <button
+              type="button"
+              onClick={() => this.setState({ hasError: false })}
+              className="mt-2 border border-white/10 bg-white/5 px-4 py-2 text-xs text-slate-300 hover:text-white"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function MiniCount({
