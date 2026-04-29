@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes_assets import router as assets_router
 from app.api.routes_auth import router as auth_router
 from app.api.routes_dashboard import router as dashboard_router
+from app.api.routes_events import router as events_router
 from app.api.routes_health import router as health_router
 from app.api.routes_incidents import router as incidents_router
 from app.core.config import settings
@@ -57,6 +59,8 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api")
     app.include_router(auth_router, prefix="/api/auth")
     app.include_router(dashboard_router, prefix="/api/dashboard")
+    app.include_router(assets_router, prefix="/api/assets")
+    app.include_router(events_router, prefix="/api/events")
     app.include_router(incidents_router, prefix="/api/incidents")
     return app
 
