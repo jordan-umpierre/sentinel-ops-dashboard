@@ -261,6 +261,17 @@ def update_incident_status(
             detail="Incident not found.",
         )
 
+    _ALLOWED_TRANSITIONS: dict[IncidentStatus, set[IncidentStatus]] = {
+        IncidentStatus.OPEN: {IncidentStatus.ACKNOWLEDGED},
+        IncidentStatus.ACKNOWLEDGED: {IncidentStatus.RESOLVED, IncidentStatus.OPEN},
+        IncidentStatus.RESOLVED: {IncidentStatus.OPEN},
+    }
+    if body.status not in _ALLOWED_TRANSITIONS.get(incident.status, set()):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Cannot transition from '{incident.status.value}' to '{body.status.value}'.",
+        )
+
     # Persist the new status and bump updated_at so the frontend query cache
     # correctly invalidates detail and list views after a mutation.
     incident.status = body.status

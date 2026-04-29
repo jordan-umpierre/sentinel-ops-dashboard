@@ -44,7 +44,6 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
         queryClient.invalidateQueries({ queryKey: ["incidents"] });
         queryClient.invalidateQueries({ queryKey: ["asset-detail"] });
         queryClient.invalidateQueries({ queryKey: ["incident-detail"] });
-        queryClient.invalidateQueries({ queryKey: ["incident-summary"] });
       };
 
       socket.onclose = () => {
