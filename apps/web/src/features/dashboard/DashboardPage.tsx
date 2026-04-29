@@ -75,6 +75,9 @@ export function DashboardPage() {
   );
   const attentionAssets = data.assets.filter((asset) => asset.status !== "nominal").slice(0, 4);
   const latestIncident = data.incidents[0];
+  const activeIncident =
+    data.incidents.find((i) => i.status === "open") ??
+    data.incidents.find((i) => i.status === "acknowledged");
   const mergedRecentEvents = [
     ...liveEvents.map((message) => message.event),
     ...data.recent_events.filter(
@@ -101,9 +104,23 @@ export function DashboardPage() {
 
         <div className="border border-white/10 bg-ink-850 p-5 shadow-panel">
           <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Operator Focus</p>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            Triage the North Gate anomaly, confirm Patrol Alpha position, and dispatch maintenance to Cold Storage.
-          </p>
+          {activeIncident ? (
+            <>
+              <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.22em] text-signal-amber">
+                {activeIncident.status === "open" ? "Unacknowledged" : "In Progress"}
+              </p>
+              <p className="mt-1 text-sm font-medium leading-6 text-white">
+                {activeIncident.title}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-400 line-clamp-2">
+                {activeIncident.summary}
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-signal-green">
+              All incidents resolved — maintain heightened awareness.
+            </p>
+          )}
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <DashboardLink to="/incidents" label="Open triage" icon={ShieldAlert} />
             <DashboardLink to="/site" label="View site" icon={Map} />

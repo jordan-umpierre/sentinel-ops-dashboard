@@ -62,7 +62,9 @@ def get_dashboard_overview(
         ),
         assets_monitored=len(assets),
         assets_in_alert=asset_status_counts[AssetStatus.ALERT] + asset_status_counts[AssetStatus.OFFLINE],
-        system_health_percent=86,
+        system_health_percent=round(
+            asset_status_counts[AssetStatus.NOMINAL] / max(len(assets), 1) * 100
+        ),
     )
 
     return DashboardOverview(
