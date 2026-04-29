@@ -1,153 +1,210 @@
-import { RadioTower, ScanLine, Server, ShieldAlert, Truck, User, Wifi } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import L from "leaflet";
+import { RadioTower, ScanLine, ShieldAlert } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Circle, MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import { useQuery } from "@tanstack/react-query";
 
 import { StatusBadge } from "../../components/StatusBadge";
-import { apiClient, type Asset, type AssetType } from "../../lib/api";
+import { apiClient, type Asset, type AssetStatus } from "../../lib/api";
 import { formatRelativeTime } from "../../lib/date";
 import { assetStatusTone } from "../../lib/tones";
+import { useLiveEvents } from "../realtime/useLiveEvents";
 import { useAuth } from "../auth/useAuth";
 
-// Each asset type gets a distinct icon so operators can scan the facility plan
-// without reading labels — matching the visual vocabulary of real ops dashboards.
-const assetTypeIcon: Record<AssetType, typeof User> = {
-  personnel: User,
-  vehicle: Truck,
-  sensor: Wifi,
-  gateway: Server
+// CartoDB Dark Matter tiles — free, no API key, matches our ink-950 palette.
+const TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+const TILE_ATTR =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+// Hex colors for each asset status, used to paint both the marker border and
+// the live-event pulse ring so the two visual systems stay in sync.
+const STATUS_COLOR: Record<AssetStatus, string> = {
+  nominal: "#22c55e",
+  watch:   "#f7b955",
+  alert:   "#ef4444",
+  offline: "#64748b"
 };
+const SELECTED_COLOR = "#38d8d8"; // signal-cyan
 
-const zones = [
-  { name: "North Gate", className: "left-[56%] top-[8%] h-[22%] w-[32%]" },
-  { name: "Cold Storage", className: "left-[10%] top-[12%] h-[28%] w-[34%]" },
-  { name: "Loading Yard", className: "left-[42%] top-[42%] h-[42%] w-[46%]" },
-  { name: "Perimeter West", className: "left-[4%] top-[48%] h-[38%] w-[26%]" },
-  { name: "Roofline East", className: "left-[78%] top-[22%] h-[18%] w-[16%]" }
-];
+// How long a live-event pulse ring stays visible on the map (ms).
+const PULSE_DURATION_MS = 6000;
 
-function normalizeAssetPosition(asset: Asset, assets: Asset[]) {
-  // The backend stores real-ish coordinates. This normalization projects them
-  // into an abstract facility plan so the site view can stay data-driven.
-  const latitudes = assets.map((item) => item.latitude);
-  const longitudes = assets.map((item) => item.longitude);
-  const minLat = Math.min(...latitudes);
-  const maxLat = Math.max(...latitudes);
-  const minLon = Math.min(...longitudes);
-  const maxLon = Math.max(...longitudes);
-  const latRange = maxLat - minLat || 1;
-  const lonRange = maxLon - minLon || 1;
-  const x = 10 + ((asset.longitude - minLon) / lonRange) * 78;
-  const y = 12 + (1 - (asset.latitude - minLat) / latRange) * 72;
-  return { x, y };
+// Build a square divIcon whose border and fill color reflect the asset's status.
+// Using divIcon avoids the default Leaflet PNG markers that break in Vite due to
+// asset URL resolution, and lets the markers match our square-edged design system.
+function makeAssetIcon(status: AssetStatus, isSelected: boolean): L.DivIcon {
+  const color = isSelected ? SELECTED_COLOR : STATUS_COLOR[status];
+  const size = isSelected ? 44 : 36;
+  const bgAlpha = isSelected ? "30" : "18";
+  return L.divIcon({
+    className: "",
+    iconSize:   [size, size],
+    iconAnchor: [size / 2, size / 2],
+    html: `<div style="
+      width:${size}px;height:${size}px;
+      border:2px solid ${color};
+      background:${color}${bgAlpha};
+      display:flex;align-items:center;justify-content:center;
+      transition:all 0.15s;
+    "><div style="width:8px;height:8px;background:${color};border-radius:50%;"></div></div>`
+  });
 }
+
+// Fits the map viewport to all asset positions on first render.
+// Wrapped as a child of MapContainer so it can call useMap() per react-leaflet rules.
+function FitToBounds({ assets }: { assets: Asset[] }) {
+  const map = useMap();
+  const fitted = useRef(false);
+  useEffect(() => {
+    if (fitted.current || !assets.length) return;
+    const bounds = L.latLngBounds(assets.map((a) => [a.latitude, a.longitude]));
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+    fitted.current = true;
+  }, [assets, map]);
+  return null;
+}
+
+type PulseRing = { id: string; lat: number; lon: number; color: string };
 
 export function SitePage() {
   const { token } = useAuth();
+  const { liveEvents } = useLiveEvents();
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [pulseRings, setPulseRings] = useState<PulseRing[]>([]);
 
   const assetsQuery = useQuery({
     queryKey: ["assets", "site-view"],
     queryFn: () => apiClient.getAssets(token!, { sort: "status" }),
-    enabled: Boolean(token)
+    enabled: Boolean(token),
+    // Refetch every 30 s so status changes appear on the map without a manual reload.
+    refetchInterval: 30_000
   });
 
+  // Auto-select the highest-priority asset on first load (alert > watch > nominal).
   useEffect(() => {
     if (!selectedAssetId && assetsQuery.data?.length) {
-      const firstAlertAsset = assetsQuery.data.find((asset) => asset.status !== "nominal");
-      setSelectedAssetId(firstAlertAsset?.id ?? assetsQuery.data[0].id);
+      const priority = assetsQuery.data.find((a) => a.status !== "nominal");
+      setSelectedAssetId(priority?.id ?? assetsQuery.data[0].id);
     }
   }, [assetsQuery.data, selectedAssetId]);
 
-  const selectedAsset = assetsQuery.data?.find((asset) => asset.id === selectedAssetId) ?? null;
+  const selectedAsset =
+    assetsQuery.data?.find((a) => a.id === selectedAssetId) ?? null;
+
+  // Derive status summary counts for the header stat row.
   const statusCounts = useMemo(() => {
     const counts = { nominal: 0, watch: 0, alert: 0, offline: 0 };
-    assetsQuery.data?.forEach((asset) => {
-      counts[asset.status] += 1;
-    });
+    assetsQuery.data?.forEach((a) => { counts[a.status] += 1; });
     return counts;
   }, [assetsQuery.data]);
+
+  // When a new live event arrives, add a short-lived pulse ring at the asset's
+  // last-known position. This gives the operator instant spatial context for
+  // where activity is happening — a key pattern in ECHO-style visualizations.
+  const latestEvent = liveEvents[0] ?? null;
+  useEffect(() => {
+    if (!latestEvent?.asset) return;
+    const { latitude, longitude, status } = latestEvent.asset;
+    const ring: PulseRing = {
+      id: `${latestEvent.event.id}-${Date.now()}`,
+      lat: latitude,
+      lon: longitude,
+      color: STATUS_COLOR[status as AssetStatus] ?? SELECTED_COLOR
+    };
+    setPulseRings((prev) => [ring, ...prev.slice(0, 4)]); // keep at most 5 rings
+    const timer = setTimeout(
+      () => setPulseRings((prev) => prev.filter((r) => r.id !== ring.id)),
+      PULSE_DURATION_MS
+    );
+    return () => clearTimeout(timer);
+  }, [latestEvent]);
 
   return (
     <div className="space-y-5">
       <section className="border border-white/10 bg-ink-850 p-5 shadow-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Common Operating Picture</p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">Site View</h2>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
+              Common Operating Picture
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Live Asset Map</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              A simplified 2D facility plan for scanning asset positions, site zones, and operational
-              attention points without adding map infrastructure too early.
+              Real-time field positions for all monitored assets. Cyan pulse rings mark where
+              the most recent telemetry events fired. Click any marker to inspect asset state
+              in the detail panel.
             </p>
           </div>
           <div className="grid grid-cols-4 gap-2 text-center text-xs">
             <MiniCount label="nominal" value={statusCounts.nominal} tone="green" />
-            <MiniCount label="watch" value={statusCounts.watch} tone="amber" />
-            <MiniCount label="alert" value={statusCounts.alert} tone="red" />
+            <MiniCount label="watch"   value={statusCounts.watch}   tone="amber" />
+            <MiniCount label="alert"   value={statusCounts.alert}   tone="red"   />
             <MiniCount label="offline" value={statusCounts.offline} tone="neutral" />
           </div>
         </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="relative min-h-[560px] overflow-hidden border border-white/10 bg-ink-850 shadow-panel">
-          <div className="flex h-14 items-center justify-between border-b border-white/10 px-5">
+        <div className="overflow-hidden border border-white/10 shadow-panel">
+          <div className="flex h-14 items-center justify-between border-b border-white/10 bg-ink-850 px-5">
             <div className="flex items-center gap-2">
               <ScanLine className="h-4 w-4 text-signal-cyan" />
-              <h3 className="font-semibold text-white">Northstar Facility Plan</h3>
+              <h3 className="font-semibold text-white">Northstar Facility — Live View</h3>
             </div>
-            <StatusBadge value="2D operational layout" tone="cyan" />
+            <StatusBadge value="live telemetry" tone="cyan" />
           </div>
 
-          <div className="relative h-[506px] bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[length:48px_48px]">
-            {zones.map((zone) => (
-              <div
-                key={zone.name}
-                className={`absolute border border-white/10 bg-white/[0.03] ${zone.className}`}
-              >
-                <span className="absolute left-3 top-3 text-xs uppercase tracking-[0.18em] text-slate-500">
-                  {zone.name}
-                </span>
-              </div>
-            ))}
+          {/* MapContainer must have an explicit height; flex-1 doesn't work inside
+              Leaflet's internal sizing. 560px matches the old facility plan height. */}
+          <MapContainer
+            center={[41.881, -87.63]}
+            zoom={15}
+            style={{ height: "560px", width: "100%" }}
+            zoomControl
+            attributionControl
+          >
+            <TileLayer url={TILE_URL} attribution={TILE_ATTR} />
 
-            {assetsQuery.isLoading ? (
-              <div className="absolute inset-0 grid place-items-center text-sm text-slate-400">
-                Loading site assets...
-              </div>
-            ) : assetsQuery.isError || !assetsQuery.data ? (
-              <div className="absolute inset-0 grid place-items-center text-sm text-signal-red">
-                Site assets are unavailable.
-              </div>
-            ) : (
-              assetsQuery.data.map((asset) => {
-                const position = normalizeAssetPosition(asset, assetsQuery.data);
-                const isSelected = asset.id === selectedAssetId;
-                const isAlert = asset.status === "alert" || asset.status === "offline";
-                // Each asset type gets a distinct icon so operators can quickly
-                // identify entity class without reading the label on click.
-                const AssetIcon = assetTypeIcon[asset.asset_type];
-                return (
-                  <button
+            {assetsQuery.data && (
+              <>
+                <FitToBounds assets={assetsQuery.data} />
+
+                {assetsQuery.data.map((asset) => (
+                  <Marker
                     key={asset.id}
-                    type="button"
-                    onClick={() => setSelectedAssetId(asset.id)}
-                    className={`absolute grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center border transition ${
-                      isSelected
-                        ? "border-signal-cyan bg-signal-cyan text-ink-950"
-                        : isAlert
-                        ? "border-signal-red/60 bg-signal-red/10 text-signal-red hover:border-signal-red"
-                        : "border-white/20 bg-ink-950 text-slate-200 hover:border-signal-cyan"
-                    }`}
-                    style={{ left: `${position.x}%`, top: `${position.y}%` }}
-                    aria-label={`Inspect ${asset.name}`}
-                    title={`${asset.name} (${asset.asset_type})`}
+                    position={[asset.latitude, asset.longitude]}
+                    icon={makeAssetIcon(asset.status, asset.id === selectedAssetId)}
+                    eventHandlers={{ click: () => setSelectedAssetId(asset.id) }}
+                    zIndexOffset={asset.id === selectedAssetId ? 1000 : 0}
                   >
-                    <AssetIcon className="h-5 w-5" />
-                  </button>
-                );
-              })
+                    {/* Tooltip appears on hover — call sign + status so operators
+                        can scan the map without clicking every marker. */}
+                    <Tooltip direction="top" offset={[0, -20]}>
+                      <span className="font-semibold">{asset.call_sign}</span>
+                      <br />
+                      {asset.name} · {asset.status}
+                    </Tooltip>
+                  </Marker>
+                ))}
+              </>
             )}
-          </div>
+
+            {/* Pulse rings mark recent live-event positions. Radius is in metres;
+                ~60 m gives a visible ring at the street-level zoom without drowning
+                adjacent markers. The ring fades out when PULSE_DURATION_MS elapses. */}
+            {pulseRings.map((ring) => (
+              <Circle
+                key={ring.id}
+                center={[ring.lat, ring.lon]}
+                radius={55}
+                pathOptions={{
+                  color:       ring.color,
+                  fillColor:   ring.color,
+                  fillOpacity: 0.12,
+                  weight:      2
+                }}
+              />
+            ))}
+          </MapContainer>
         </div>
 
         <aside className="border border-white/10 bg-ink-850 shadow-panel">
@@ -166,36 +223,41 @@ export function SitePage() {
                     </p>
                     <h4 className="mt-2 text-xl font-semibold text-white">{selectedAsset.name}</h4>
                   </div>
-                  <StatusBadge value={selectedAsset.status} tone={assetStatusTone[selectedAsset.status]} />
+                  <StatusBadge
+                    value={selectedAsset.status}
+                    tone={assetStatusTone[selectedAsset.status]}
+                  />
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-400">
-                  {selectedAsset.asset_type} positioned in {selectedAsset.zone}. Last telemetry update was{" "}
-                  {formatRelativeTime(selectedAsset.last_seen_at)}.
+                  {selectedAsset.asset_type} positioned in {selectedAsset.zone}. Last telemetry
+                  update was {formatRelativeTime(selectedAsset.last_seen_at)}.
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <SiteStat label="Battery" value={`${selectedAsset.battery_level}%`} />
-                <SiteStat label="Latitude" value={selectedAsset.latitude.toFixed(4)} />
+                <SiteStat label="Battery"   value={`${selectedAsset.battery_level}%`} />
+                <SiteStat label="Latitude"  value={selectedAsset.latitude.toFixed(4)} />
                 <SiteStat label="Longitude" value={selectedAsset.longitude.toFixed(4)} />
-                <SiteStat label="Zone" value={selectedAsset.zone} />
+                <SiteStat label="Zone"      value={selectedAsset.zone} />
               </div>
 
-              {selectedAsset.status !== "nominal" ? (
+              {selectedAsset.status !== "nominal" && (
                 <div className="border border-signal-amber/30 bg-signal-amber/10 p-4">
                   <div className="flex items-center gap-2 text-signal-amber">
                     <ShieldAlert className="h-4 w-4" />
                     <p className="text-sm font-semibold">Operator attention recommended</p>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-300">
-                    Review the asset detail and event history pages for linked telemetry before closing
-                    the loop.
+                    Review the asset detail and event history pages for linked telemetry before
+                    closing the loop.
                   </p>
                 </div>
-              ) : null}
+              )}
             </div>
           ) : (
-            <div className="p-5 text-sm text-slate-400">Select a marker to inspect asset state.</div>
+            <div className="p-5 text-sm text-slate-400">
+              Select a marker to inspect asset state.
+            </div>
           )}
         </aside>
       </section>
