@@ -4,6 +4,13 @@ export type UserRole = "admin" | "operator" | "viewer";
 export type Severity = "info" | "low" | "medium" | "high" | "critical";
 export type AssetStatus = "nominal" | "watch" | "alert" | "offline";
 export type AssetType = "personnel" | "vehicle" | "sensor" | "gateway";
+export type EventType =
+  | "access_denied"
+  | "geofence_breach"
+  | "equipment_offline"
+  | "temperature_threshold"
+  | "sensor_heartbeat"
+  | "route_deviation";
 export type IncidentStatus = "open" | "acknowledged" | "resolved";
 
 export type User = {
@@ -119,6 +126,26 @@ export type IncidentFilters = {
   severity?: Severity | "";
 };
 
+export type EventFilters = {
+  search?: string;
+  asset_id?: string;
+  severity?: Severity | "";
+  event_type?: EventType | "";
+  sort?: "newest" | "oldest";
+  page?: number;
+  page_size?: number;
+};
+
+export type EventHistoryPage = {
+  items: EventRecord[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+  };
+};
+
 function toQueryString(params: Record<string, string | number | undefined>) {
   // URLSearchParams keeps filter construction structured and avoids hand-built
   // query strings as Phase 2 adds more searchable surfaces.
@@ -195,6 +222,11 @@ export const apiClient = {
   },
   getIncidentSummary(token: string, incidentId: string) {
     return request<IncidentSummary>(`/api/incidents/${incidentId}/summary`, {
+      headers: authHeaders(token)
+    });
+  },
+  getEvents(token: string, filters: EventFilters = {}) {
+    return request<EventHistoryPage>(`/api/events${toQueryString(filters)}`, {
       headers: authHeaders(token)
     });
   }
