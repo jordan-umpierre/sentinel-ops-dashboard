@@ -1,10 +1,10 @@
+/* Leaflet map styles must be imported before Tailwind directives so Vite's CSS
+   pipeline does not warn about import order during production builds. */
+@import "leaflet/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Leaflet map styles — imported here so they load before any component that
-   renders a MapContainer, avoiding a flash of unstyled map tiles. */
-@import "leaflet/dist/leaflet.css";
 
 /* Override Leaflet's default light-theme UI controls to match our dark console.
    CartoDB Dark Matter tiles handle the basemap; these overrides handle the

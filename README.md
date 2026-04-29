@@ -18,7 +18,7 @@ The architecture mirrors the operator-facing layer of platforms like PRISM and M
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS |
 | State | TanStack Query v5 (React Query) with invalidation on WebSocket push |
 | Map | Leaflet + react-leaflet, CartoDB Dark Matter tiles |
-| Tests | pytest integration suite (71 tests, ~3 s, isolated SQLite test DB) |
+| Tests | pytest integration suite (75 tests, ~5 s, isolated SQLite test DB) |
 
 ---
 
@@ -31,7 +31,7 @@ The architecture mirrors the operator-facing layer of platforms like PRISM and M
 | 3 | Site operating picture, event activity 24-hour histogram |
 | 4 | WebSocket live event feed, push toast notifications with incident correlation callout, connection status indicator |
 | 5 | 24-hour activity sparkline, incident status transitions (open → acknowledged → resolved) with state machine enforcement, CSV event export |
-| 6 | 71-test pytest integration suite, shimmer skeleton loaders, 300 ms search debounce |
+| 6 | 75-test pytest integration suite, shimmer skeleton loaders, 300 ms search debounce |
 | 7 | AI summary DB caching with TTL + explicit invalidation on status change, cached/live badge in UI |
 | 8 | Live asset map (Leaflet, dark tiles, status-colored markers, real-time 6 s pulse rings) |
 
@@ -64,8 +64,9 @@ sentinel-ops-dashboard/
 │   │   │   │   ├── realtime.py          # EventConnectionManager (WebSocket fan-out)
 │   │   │   │   └── seed.py              # Demo data + three role accounts
 │   │   │   └── simulation/
-│   │   │       └── generator.py     # Background thread: generates events every N s
-│   │   └── tests/                   # pytest integration suite (71 tests)
+│   │   │       └── generator.py     # Async simulator: generates events every N s
+│   │   ├── alembic/                 # Migration scaffold + operational index migration
+│   │   └── tests/                   # pytest integration suite (75 tests)
 │   └── web/                         # React + TypeScript frontend
 │       └── src/
 │           ├── app/                 # Router, ProtectedRoute, AppShell
@@ -110,7 +111,7 @@ npm run dev
 # → UI at http://localhost:5173
 ```
 
-The backend seeds the database on first startup — demo accounts, a site, 20 assets, 50+ events, and several correlated incidents are created automatically.
+The backend seeds the database on first startup — demo accounts, a site, 5 assets, 5 events, and one correlated incident are created automatically. The simulator then continues adding live events and correlated incidents while the API is running.
 
 ---
 
@@ -189,7 +190,7 @@ The following 8-step walkthrough demonstrates every system capability in under 5
 | `apps/web/src/features/site/SitePage.tsx` | react-leaflet map; live pulse rings keyed to WebSocket events; FitToBounds on first render |
 | `apps/web/src/features/incidents/IncidentsPage.tsx` | `useMutation` for status transitions; role-aware button rendering; summary cache invalidation |
 | `apps/web/src/lib/api.ts` | Fully typed API client; `exportEvents` (fetch → Blob → `createObjectURL` → download) |
-| `apps/api/tests/` | 71-test integration suite covering lifecycle, RBAC, cache invalidation, CSV export, pagination |
+| `apps/api/tests/` | 75-test integration suite covering lifecycle, RBAC, cache invalidation, CSV export, pagination, WebSocket auth |
 
 ---
 
@@ -203,6 +204,7 @@ The following 8-step walkthrough demonstrates every system capability in under 5
 | `OPENAI_MODEL` | No | `gpt-4o-mini` | Chat Completions model |
 | `SUMMARY_CACHE_TTL_MINUTES` | No | `60` | How long AI summaries stay cached before expiry |
 | `CORS_ORIGINS` | No | `http://localhost:5173,...` | Comma-separated allowed origins |
+| `LOG_LEVEL` | No | `INFO` | API log verbosity for request, realtime, and AI fallback logs |
 | `SIMULATOR_ENABLED` | No | `true` | Toggle the background event generator |
 | `SIMULATOR_INTERVAL_SECONDS` | No | `8` | Seconds between generated events |
 
@@ -215,7 +217,7 @@ cd apps/api
 pytest -v
 ```
 
-71 tests, ~3 seconds. The suite uses an isolated in-memory SQLite database — no running server or Postgres instance required. Coverage includes:
+75 tests, ~5 seconds. The local suite uses an isolated file-based SQLite database — no running server or Postgres instance required. CI also runs the backend suite against PostgreSQL. Coverage includes:
 
 - Auth: login happy path, wrong password, unknown email, all three roles, `/me` with valid/missing/expired token
 - Assets: list filters, type filter, call sign search, battery sort, detail with event history, 404
@@ -224,13 +226,25 @@ pytest -v
 - Dashboard: overview shape, metric non-negativity, activity 24-bucket structure, `total == sum(counts)`
 - Summary cache: first call = live, second call = cached, `?refresh=true` bypass, status-change invalidation
 - CSV export: content-type, `Content-Disposition` header, column names, filter passthrough
+- Realtime: WebSocket first-frame auth accepts valid JWTs and rejects invalid/malformed frames with `1008`
+
+---
+
+## Migrations
+
+The app still calls `Base.metadata.create_all()` on startup so a fresh portfolio demo remains one command to run. Alembic is included for schema evolution beyond the demo baseline, and the first migration captures the operational indexes used by asset, event, incident, and summary-cache queries.
+
+```bash
+cd apps/api
+alembic upgrade head
+```
 
 ---
 
 ## Design decisions
 
 **Why the ABC provider interface for AI?**
-`IncidentSummaryProvider` is an abstract base class with a single `summarize(incident, events)` method. `OpenAIIncidentSummaryProvider` calls Chat Completions with a structured JSON response schema; `FallbackIncidentSummaryProvider` returns a deterministic template without any network call. The DB cache layer wraps both through the same interface. This means: zero API calls during tests, safe demo without an OpenAI key, and adding a new provider (Anthropic, Azure OpenAI) is a one-class change.
+`IncidentSummaryProvider` is an abstract base class with a single `generate(context)` method. `OpenAIIncidentSummaryProvider` calls Chat Completions with a structured JSON response schema; `FallbackIncidentSummaryProvider` returns a deterministic template without any network call. The DB cache layer wraps both through the same interface. This means: zero API calls during tests, safe demo without an OpenAI key, and adding a new provider (Anthropic, Azure OpenAI) is a one-class change.
 
 **Why DB-level caching instead of Redis?**
 For a single-region operational demo, writing the summary into the same SQLite/Postgres instance as the incident data keeps the dependency count at zero and avoids cross-service consistency edge cases. The cache row is invalidated explicitly on status change — not solely via TTL — because the incident status appears in the prompt. Serving a stale "open" summary after an acknowledgement would mislead operators.

@@ -191,7 +191,7 @@ class TestIncidentSummaryCache:
         )
 
         # Warm the cache.
-        r1 = client.get(f"/api/incidents/{incident_id}/summary", headers=auth_headers)
+        client.get(f"/api/incidents/{incident_id}/summary", headers=auth_headers)
         # Confirm it's now cached.
         r2 = client.get(f"/api/incidents/{incident_id}/summary", headers=auth_headers)
         assert r2.json()["cached_at"] is not None

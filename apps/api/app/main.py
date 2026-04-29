@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+import logging
+import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes_assets import router as assets_router
@@ -15,6 +17,19 @@ from app.core.database import Base, engine
 from app.services.realtime import event_connection_manager
 from app.services.seed import seed_demo_data
 from app.simulation.generator import EventSimulator
+
+
+logger = logging.getLogger("sentinel.api")
+
+
+def configure_logging() -> None:
+    """Configure basic structured-enough logs for local runs and containers."""
+
+    level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
 
 @asynccontextmanager
@@ -44,6 +59,8 @@ def create_app() -> FastAPI:
     settings loading.
     """
 
+    configure_logging()
+
     app = FastAPI(
         title=settings.PROJECT_NAME,
         version=settings.API_VERSION,
@@ -60,6 +77,31 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        start = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration_ms = (time.perf_counter() - start) * 1000
+            logger.exception(
+                "request.failed method=%s path=%s duration_ms=%.2f",
+                request.method,
+                request.url.path,
+                duration_ms,
+            )
+            raise
+
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "request.completed method=%s path=%s status_code=%s duration_ms=%.2f",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+        return response
 
     # Route modules are grouped by product capability so Phase 2 can add richer
     # assets, incidents, and event-history APIs without crowding this file.

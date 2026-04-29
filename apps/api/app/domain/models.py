@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -54,6 +54,11 @@ class Asset(Base):
     """Personnel, vehicles, sensors, and gateways visible to operators."""
 
     __tablename__ = "assets"
+    __table_args__ = (
+        Index("ix_assets_site_status", "site_id", "status"),
+        Index("ix_assets_type_status", "asset_type", "status"),
+        Index("ix_assets_zone", "zone"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
     site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
@@ -80,6 +85,12 @@ class Event(Base):
     """
 
     __tablename__ = "events"
+    __table_args__ = (
+        Index("ix_events_site_occurred_at", "site_id", "occurred_at"),
+        Index("ix_events_asset_occurred_at", "asset_id", "occurred_at"),
+        Index("ix_events_severity_occurred_at", "severity", "occurred_at"),
+        Index("ix_events_type_occurred_at", "event_type", "occurred_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
     site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
@@ -103,6 +114,11 @@ class Incident(Base):
     """Correlated operational issue that operators can triage and explain."""
 
     __tablename__ = "incidents"
+    __table_args__ = (
+        Index("ix_incidents_site_status", "site_id", "status"),
+        Index("ix_incidents_status_created_at", "status", "created_at"),
+        Index("ix_incidents_severity_created_at", "severity", "created_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
     site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
@@ -143,6 +159,9 @@ class IncidentSummaryCache(Base):
     """
 
     __tablename__ = "incident_summary_cache"
+    __table_args__ = (
+        Index("ix_incident_summary_cache_expires_at", "expires_at"),
+    )
 
     incident_id: Mapped[str] = mapped_column(
         ForeignKey("incidents.id"), primary_key=True

@@ -1,4 +1,5 @@
 import json
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterable
@@ -8,6 +9,9 @@ from openai import OpenAI
 from app.core.config import settings
 from app.domain.models import Asset, Event, Incident
 from app.schemas.ai import IncidentSummaryRead
+
+
+logger = logging.getLogger("sentinel.ai")
 
 
 @dataclass(frozen=True)
@@ -122,6 +126,7 @@ class OpenAIIncidentSummaryProvider(IncidentSummaryProvider):
         except Exception:
             # Any API error, network timeout, or unexpected JSON shape gracefully
             # degrades to the deterministic provider rather than surfacing a 500.
+            logger.warning("incident_summary.openai_fallback", exc_info=True)
             return self.fallback_provider.generate(context)
 
 

@@ -7,8 +7,12 @@ FastAPI stack so the JWT encode/decode round-trip and password hashing path are
 both exercised — not mocked.
 """
 
-import pytest
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
+from jose import jwt
+
+from app.core.config import settings
 
 
 class TestLogin:
@@ -73,5 +77,20 @@ class TestMe:
         resp = client.get(
             "/api/auth/me",
             headers={"Authorization": "Bearer not.a.valid.jwt"},
+        )
+        assert resp.status_code == 401
+
+    def test_expired_token_returns_401(self, client: TestClient) -> None:
+        expired_token = jwt.encode(
+            {
+                "sub": "expired-user",
+                "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+            },
+            settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM,
+        )
+        resp = client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {expired_token}"},
         )
         assert resp.status_code == 401

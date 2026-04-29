@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import JWTError
@@ -14,6 +15,7 @@ from app.services.realtime import event_connection_manager
 router = APIRouter(tags=["realtime"])
 
 _AUTH_TIMEOUT_SECONDS = 5
+logger = logging.getLogger("sentinel.realtime")
 
 
 def _resolve_user_from_token(token: str) -> bool:
@@ -54,16 +56,20 @@ async def stream_events(websocket: WebSocket) -> None:
         frame = json.loads(raw)
         token = frame.get("token", "") if isinstance(frame, dict) else ""
     except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+        logger.warning("websocket.auth_frame_invalid")
         await websocket.close(code=1008)
         return
 
     if not token or not _resolve_user_from_token(token):
+        logger.warning("websocket.auth_rejected")
         await websocket.close(code=1008)
         return
 
     event_connection_manager.register(websocket)
+    logger.info("websocket.connected")
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         event_connection_manager.disconnect(websocket)
+        logger.info("websocket.disconnected")

@@ -1,7 +1,11 @@
 import json
+import logging
 from typing import Any
 
 from fastapi import WebSocket
+
+
+logger = logging.getLogger("sentinel.realtime")
 
 
 class EventConnectionManager:
@@ -49,6 +53,8 @@ class EventConnectionManager:
 
         for websocket in disconnected:
             self.disconnect(websocket)
+        if disconnected:
+            logger.info("websocket.broadcast_pruned count=%s", len(disconnected))
 
 
 event_connection_manager = EventConnectionManager()

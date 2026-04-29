@@ -267,9 +267,11 @@ export const apiClient = {
   // Download filtered event history as a CSV blob. Page/page_size params are
   // stripped because the export always contains the full matching result set.
   async exportEvents(token: string, filters: EventFilters = {}): Promise<Blob> {
-    const { page: _page, page_size: _pageSize, ...exportFilters } = filters;
+    const exportFilters = Object.fromEntries(
+      Object.entries(filters).filter(([key]) => key !== "page" && key !== "page_size")
+    ) as Record<string, string | number | undefined>;
     const url = `${API_BASE_URL}/api/events/export${toQueryString(
-      exportFilters as Record<string, string | number | undefined>
+      exportFilters
     )}`;
     const response = await fetch(url, { headers: authHeaders(token) });
     if (!response.ok) throw new Error(`Export failed: ${response.status}`);

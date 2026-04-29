@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str = "Sentinel API"
     API_VERSION: str = "0.1.0"
+    LOG_LEVEL: str = "INFO"
     DATABASE_URL: str = "sqlite:///./sentinel-dev.db"
     JWT_SECRET_KEY: str  # required — generate with: openssl rand -hex 32
     JWT_ALGORITHM: str = "HS256"

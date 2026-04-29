@@ -9,14 +9,19 @@ when pydantic-settings reads the configuration.
 
 import os
 
-# These must come before any app.* imports. They redirect all DB activity to a
-# dedicated test file so tests never touch the dev database.
-os.environ["DATABASE_URL"] = "sqlite:///./tests/sentinel-test.db"
+# These must come before any app.* imports. Local runs default to a dedicated
+# SQLite file so tests never touch the dev database. CI can opt into PostgreSQL
+# by setting SENTINEL_TEST_DATABASE_URL.
+TEST_DATABASE_URL = os.environ.get(
+    "SENTINEL_TEST_DATABASE_URL",
+    "sqlite:///./tests/sentinel-test.db",
+)
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["SIMULATOR_ENABLED"] = "false"
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-not-for-production-use-32x")
 
-import pytest
-from fastapi.testclient import TestClient
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -27,6 +32,10 @@ def clean_test_db():
     call create_all and seed_demo_data exactly once via the real application path.
     StaticPool tricks are not needed and this approach is easy to explain.
     """
+    if not TEST_DATABASE_URL.startswith("sqlite"):
+        yield
+        return
+
     db_path = "./tests/sentinel-test.db"
     if os.path.exists(db_path):
         os.remove(db_path)
