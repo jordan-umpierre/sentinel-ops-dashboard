@@ -15,8 +15,8 @@ and review incident/event context generated from deterministic demo data.
 - Backend: FastAPI + SQLAlchemy
 - Database: PostgreSQL in Docker, SQLite fallback for quick local API runs
 - Realtime: WebSockets planned for Phase 3
-- AI summaries: OpenAI provider planned behind a swappable interface with a
-  deterministic fallback when no API key is configured
+- AI summaries: OpenAI provider behind a swappable interface with a deterministic
+  fallback when no API key is configured
 - Dev environment: Docker Compose
 
 ## Current Phase
@@ -31,6 +31,7 @@ Phase 1 is implemented as a runnable foundation:
 - JSON JWT login plus `/api/auth/me`
 - Protected React app shell with route navigation
 - Main dashboard consuming `/api/dashboard/overview`
+- Incident summary provider at `/api/incidents/{incident_id}/summary`
 
 ## Run With Docker
 
