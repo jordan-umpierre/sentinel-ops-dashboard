@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     Defaults favor a quick local run with SQLite, while Docker Compose overrides
     `DATABASE_URL` to use PostgreSQL so the project still demonstrates the
-    production-oriented stack named in the brief.
+    production-oriented stack chosen for the product scope.
     """
 
     PROJECT_NAME: str = "Sentinel API"

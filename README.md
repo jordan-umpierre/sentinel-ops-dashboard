@@ -96,4 +96,5 @@ apps/
       styles/       Tailwind entrypoint
 ```
 
-See `PROJECT_BRIEF.md` for the full build specification and later phases.
+The roadmap is intentionally phased so the demo stays runnable while realtime
+simulation, richer incident workflows, and visual polish are added.

@@ -21,6 +21,9 @@ npm-debug.log*
 .env.local
 .env.*.local
 
+# Local planning notes
+PROJECT_BRIEF.md
+
 # Editor
 .idea/
 .vscode/

@@ -36,7 +36,7 @@ def seed_demo_data() -> None:
         db.add(site)
         db.flush()
 
-        # Seed users represent the three roles named in the brief. They share one
+        # Seed users represent the three demo roles. They share one
         # memorable demo password so the portfolio demo is easy to narrate.
         users = [
             User(
