@@ -7,19 +7,7 @@ import { LoginPage } from "../features/auth/LoginPage";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { EventsPage } from "../features/events/EventsPage";
 import { IncidentsPage } from "../features/incidents/IncidentsPage";
-
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <section className="min-h-[420px] border border-white/10 bg-ink-850 p-6 shadow-panel">
-      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Workspace</p>
-      <h1 className="mt-3 text-2xl font-semibold text-white">{title}</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-        Operational records for this surface are queued behind the primary
-        command dashboard.
-      </p>
-    </section>
-  );
-}
+import { SitePage } from "../features/site/SitePage";
 
 export function App() {
   return (
@@ -36,7 +24,7 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="assets" element={<AssetsPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
-        <Route path="site" element={<PlaceholderPage title="Site View" />} />
+        <Route path="site" element={<SitePage />} />
         <Route path="events" element={<EventsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
