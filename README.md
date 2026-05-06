@@ -1,6 +1,6 @@
 # Sentinel — Operational Awareness Console
 
-A full-stack command-and-control (C2) dashboard for field asset monitoring, correlated incident triage, and AI-assisted operator decision support. Built as a production-representative portfolio project demonstrating real-time data synthesis, role-based access control, WebSocket event streaming, and a clean operator UX under live-ops conditions.
+A full-stack command-and-control (C2) dashboard for field asset monitoring, correlated incident triage, and AI-assisted operator decision support.
 
 The architecture mirrors the operator-facing layer of platforms like PRISM and MOSAIC: field assets report telemetry, events are correlated into incidents, and operators get a unified picture of site health across personnel, vehicles, and sensors — without toggling between tools.
 
@@ -24,7 +24,7 @@ The architecture mirrors the operator-facing layer of platforms like PRISM and M
 
 ## Features
 
-| Phase | What ships |
+| Release | What ships |
 |---|---|
 | 1 | JWT auth with RBAC, asset tracking, event history with pagination + filters, dashboard overview |
 | 2 | Incident triage workspace, AI summary (OpenAI Chat Completions + deterministic fallback), asset detail panel |
@@ -143,9 +143,9 @@ docker compose up --build
 
 ---
 
-## Interview demo script
+## Walkthrough
 
-The following 8-step walkthrough demonstrates every system capability in under 5 minutes, framed around a realistic operational scenario: *a perimeter sensor fires at 03:00, the system correlates it with a geofence breach, and an operator triages from the console.*
+The following 8-step walkthrough covers every system capability in under 5 minutes, framed around a realistic operational scenario: *a perimeter sensor fires at 03:00, the system correlates it with a geofence breach, and an operator triages from the console.*
 
 1. **Login as operator** (`operator@sentinel.dev` / `sentinel123`)
    JWT issued, role-aware nav rendered, WebSocket connects — green "LIVE" indicator appears in the header.
@@ -232,7 +232,7 @@ pytest -v
 
 ## Migrations
 
-The app still calls `Base.metadata.create_all()` on startup so a fresh portfolio demo remains one command to run. Alembic is included for schema evolution beyond the demo baseline, and the first migration captures the operational indexes used by asset, event, incident, and summary-cache queries.
+The app still calls `Base.metadata.create_all()` on startup. Alembic is included for schema evolution beyond the demo baseline, and the first migration captures the operational indexes used by asset, event, incident, and summary-cache queries.
 
 ```bash
 cd apps/api
