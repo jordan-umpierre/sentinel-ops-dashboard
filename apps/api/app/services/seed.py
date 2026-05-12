@@ -37,7 +37,7 @@ def seed_demo_data() -> None:
         db.flush()
 
         # Seed users represent the three demo roles. They share one
-        # memorable demo password so the portfolio demo is easy to narrate.
+        # memorable demo password so the demo is easy to narrate.
         users = [
             User(
                 email="admin@sentinel.dev",

@@ -52,7 +52,11 @@ export function IncidentsPage() {
   });
 
   useEffect(() => {
-    if (!selectedIncidentId && incidentsQuery.data?.length) {
+    if (!incidentsQuery.data?.length) return;
+    const stillInList =
+      selectedIncidentId &&
+      incidentsQuery.data.some((incident) => incident.id === selectedIncidentId);
+    if (!stillInList) {
       setSelectedIncidentId(incidentsQuery.data[0].id);
     }
   }, [incidentsQuery.data, selectedIncidentId]);

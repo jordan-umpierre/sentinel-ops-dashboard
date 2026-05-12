@@ -44,7 +44,10 @@ export function AssetsPage() {
   });
 
   useEffect(() => {
-    if (!selectedAssetId && assetsQuery.data?.length) {
+    if (!assetsQuery.data?.length) return;
+    const stillInList =
+      selectedAssetId && assetsQuery.data.some((asset) => asset.id === selectedAssetId);
+    if (!stillInList) {
       setSelectedAssetId(assetsQuery.data[0].id);
     }
   }, [assetsQuery.data, selectedAssetId]);
