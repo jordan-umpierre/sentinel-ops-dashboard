@@ -11,7 +11,13 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir .
 
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./
+COPY scripts ./scripts
+RUN chmod +x ./scripts/entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Honor $PORT for platforms like Fly.io / Render / Railway that assign it
+# dynamically; fall back to 8000 for local docker runs.
+CMD ["./scripts/entrypoint.sh"]

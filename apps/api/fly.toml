@@ -1,0 +1,48 @@
+# Fly.io deployment config for the Sentinel API.
+#
+# Deploy from the repo root with:
+#   fly launch --copy-config --no-deploy --config apps/api/fly.toml
+#   fly postgres create --name sentinel-db
+#   fly postgres attach sentinel-db
+#   fly secrets set JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+#                   CORS_ORIGINS="https://<your-vercel-domain>"
+#   fly deploy --config apps/api/fly.toml --dockerfile apps/api/Dockerfile
+
+app = "sentinel-api"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  LOG_LEVEL = "INFO"
+  SIMULATOR_ENABLED = "true"
+  SIMULATOR_INTERVAL_SECONDS = "8"
+  # CORS_ORIGINS, JWT_SECRET_KEY, DATABASE_URL, OPENAI_API_KEY are set as secrets.
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  # Keep WebSocket connections from being idle-killed too aggressively.
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 200
+    hard_limit = 250
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  timeout = "5s"
+  path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

@@ -6,6 +6,18 @@ The architecture mirrors the operator-facing layer of platforms like PRISM and M
 
 ---
 
+## Live demo
+
+| Surface | URL |
+|---|---|
+| Frontend | `https://sentinel-ops.vercel.app` *(pending first deploy)* |
+| API | `https://sentinel-api.fly.dev` *(pending first deploy)* |
+| API docs | `https://sentinel-api.fly.dev/docs` |
+
+The demo accounts in the table below work against the live deployment too.
+
+---
+
 ## Stack
 
 | Layer | Technology |
@@ -18,7 +30,7 @@ The architecture mirrors the operator-facing layer of platforms like PRISM and M
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS |
 | State | TanStack Query v5 (React Query) with invalidation on WebSocket push |
 | Map | Leaflet + react-leaflet, CartoDB Dark Matter tiles |
-| Tests | pytest integration suite (75 tests, ~5 s, isolated SQLite test DB) |
+| Tests | pytest integration suite (75 backend tests, ~5 s, isolated SQLite test DB) + Vitest component suite (18 tests, jsdom) |
 
 ---
 
@@ -213,11 +225,25 @@ The following 8-step walkthrough covers every system capability in under 5 minut
 ## Running the test suite
 
 ```bash
+# Backend — pytest, 75 tests, ~5 s
 cd apps/api
 pytest -v
+
+# Frontend — Vitest + React Testing Library, 18 tests, ~1 s
+cd apps/web
+npm test
 ```
 
-75 tests, ~5 seconds. The local suite uses an isolated file-based SQLite database — no running server or Postgres instance required. CI also runs the backend suite against PostgreSQL. Coverage includes:
+The local backend suite uses an isolated file-based SQLite database — no running server or Postgres instance required. CI runs the backend suite against PostgreSQL and the frontend suite against jsdom. Frontend coverage focuses on:
+
+- `lib/tones.ts` — pinning severity/status → colour mappings against silent renames.
+- `lib/date.ts` — relative time bucketing (minutes/hours/days).
+- `lib/useDebounce.ts` — debounced state with fake-timer assertions, including rapid-change collapse.
+- `components/StatusBadge.tsx` — value rendering, snake_case normalisation, default tone.
+- `components/LiveEventToast.tsx` — toast appearance for high-severity events, incident callout, manual dismiss.
+- `components/ActivitySparkline.tsx` — peak-hour callout, empty-window survival.
+
+Backend coverage includes:
 
 - Auth: login happy path, wrong password, unknown email, all three roles, `/me` with valid/missing/expired token
 - Assets: list filters, type filter, call sign search, battery sort, detail with event history, 404
@@ -227,6 +253,69 @@ pytest -v
 - Summary cache: first call = live, second call = cached, `?refresh=true` bypass, status-change invalidation
 - CSV export: content-type, `Content-Disposition` header, column names, filter passthrough
 - Realtime: WebSocket first-frame auth accepts valid JWTs and rejects invalid/malformed frames with `1008`
+
+---
+
+## Production deployment
+
+The repo ships configs for the recommended target: **Vercel for the frontend, Fly.io for the API + managed Postgres**.
+
+### 1. Deploy the API to Fly.io
+
+```bash
+cd apps/api
+
+# One-time: install fly CLI and authenticate
+brew install flyctl
+fly auth login
+
+# Create the app, attach Postgres, set secrets
+fly launch --copy-config --no-deploy --config fly.toml
+fly postgres create --name sentinel-db --region ord
+fly postgres attach sentinel-db
+fly secrets set \
+  JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+  CORS_ORIGINS="https://<your-vercel-domain>" \
+  OPENAI_API_KEY=""  # leave empty to use the deterministic fallback
+
+# Ship it. The Dockerfile entrypoint runs `alembic upgrade head` before uvicorn.
+fly deploy --config fly.toml --dockerfile Dockerfile
+```
+
+`fly.toml` declares the health check (`GET /api/health`), HTTPS-only routing, and a soft concurrency cap of 200 connections — enough headroom for the WebSocket clients connected by every dashboard tab.
+
+### 2. Deploy the frontend to Vercel
+
+```bash
+# One-time: install Vercel CLI and authenticate
+npm i -g vercel
+vercel login
+
+# Link the repo (run from repo root — vercel.json builds apps/web)
+vercel link
+
+# Set the build-time env var pointing at the Fly API
+vercel env add VITE_API_BASE_URL production   # paste: https://sentinel-api.fly.dev
+
+# Ship it
+vercel deploy --prod
+```
+
+`vercel.json` at repo root tells Vercel to install + build inside `apps/web` and serve `apps/web/dist`. The SPA rewrite routes every non-asset path to `index.html` so the React Router deep links work.
+
+After both deploys land, update the *Live demo* table at the top of this README with the actual URLs.
+
+### Production environment variables
+
+| Variable | Side | Where to set |
+|---|---|---|
+| `JWT_SECRET_KEY` | API | `fly secrets set` |
+| `DATABASE_URL` | API | set automatically by `fly postgres attach` |
+| `CORS_ORIGINS` | API | `fly secrets set` — must contain the Vercel domain |
+| `OPENAI_API_KEY` | API | `fly secrets set` (optional; empty → deterministic fallback) |
+| `VITE_API_BASE_URL` | Frontend | `vercel env add` — must be the Fly app URL over HTTPS |
+
+`VITE_WS_BASE_URL` is derived from `VITE_API_BASE_URL` automatically (`https://` → `wss://`); override only if the API and WebSocket origins ever diverge.
 
 ---
 

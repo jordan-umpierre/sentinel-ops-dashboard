@@ -34,6 +34,8 @@ services:
     volumes:
       - ./apps/api/app:/app/app
 
+  # web/ is dev-only — runs the Vite dev server for the local docker workflow.
+  # Production deploy of the frontend is on Vercel (see vercel.json + README).
   web:
     build:
       context: ./apps/web
