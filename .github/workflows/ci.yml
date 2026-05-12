@@ -51,10 +51,13 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
       - name: Install frontend
         working-directory: apps/web
-        run: npm ci
+        run: npm ci --legacy-peer-deps
       - name: Lint
         working-directory: apps/web
         run: npm run lint
+      - name: Test
+        working-directory: apps/web
+        run: npm test
       - name: Build
         working-directory: apps/web
         run: npm run build
