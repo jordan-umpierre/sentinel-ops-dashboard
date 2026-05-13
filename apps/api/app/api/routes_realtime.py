@@ -55,8 +55,11 @@ async def stream_events(websocket: WebSocket) -> None:
         )
         frame = json.loads(raw)
         token = frame.get("token", "") if isinstance(frame, dict) else ""
-    except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
-        logger.warning("websocket.auth_frame_invalid")
+    except Exception:
+        # Timeout, malformed JSON, or premature disconnect all collapse into a
+        # single "invalid handshake" outcome — the policy-violation close is the
+        # same in every case so the caller can't distinguish reasons.
+        logger.warning("websocket.auth_frame_invalid", exc_info=True)
         await websocket.close(code=1008)
         return
 

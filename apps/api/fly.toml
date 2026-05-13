@@ -8,7 +8,7 @@
 #                   CORS_ORIGINS="https://<your-vercel-domain>"
 #   fly deploy --config apps/api/fly.toml --dockerfile apps/api/Dockerfile
 
-app = "sentinel-api"
+app = "sentinel-ops-api"
 primary_region = "ord"
 
 [build]

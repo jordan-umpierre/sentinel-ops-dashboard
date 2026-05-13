@@ -3,6 +3,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .ruff_cache/
 .venv/
@@ -27,3 +28,4 @@ PROJECT_BRIEF.md
 # Editor
 .idea/
 .vscode/
+.vercel

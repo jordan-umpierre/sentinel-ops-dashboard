@@ -10,9 +10,11 @@ The architecture mirrors the operator-facing layer of platforms like PRISM and M
 
 | Surface | URL |
 |---|---|
-| Frontend | `https://sentinel-ops.vercel.app` *(pending first deploy)* |
-| API | `https://sentinel-api.fly.dev` *(pending first deploy)* |
-| API docs | `https://sentinel-api.fly.dev/docs` |
+| Frontend | [`https://sentinel-ops-flame.vercel.app`](https://sentinel-ops-flame.vercel.app) |
+| API | [`https://sentinel-ops-api.fly.dev`](https://sentinel-ops-api.fly.dev) |
+| API docs | [`https://sentinel-ops-api.fly.dev/docs`](https://sentinel-ops-api.fly.dev/docs) |
+
+> The API runs on a Fly.io machine that auto-stops when idle. The first request after a quiet period may take ~5–10 s to wake the machine and complete; subsequent requests are immediate.
 
 The demo accounts in the table below work against the live deployment too.
 
@@ -295,7 +297,7 @@ vercel login
 vercel link
 
 # Set the build-time env var pointing at the Fly API
-vercel env add VITE_API_BASE_URL production   # paste: https://sentinel-api.fly.dev
+vercel env add VITE_API_BASE_URL production   # paste: https://sentinel-ops-api.fly.dev
 
 # Ship it
 vercel deploy --prod
@@ -303,7 +305,7 @@ vercel deploy --prod
 
 `vercel.json` at repo root tells Vercel to install + build inside `apps/web` and serve `apps/web/dist`. The SPA rewrite routes every non-asset path to `index.html` so the React Router deep links work.
 
-After both deploys land, update the *Live demo* table at the top of this README with the actual URLs.
+The live URLs from this deploy already power the *Live demo* table at the top of this README.
 
 ### Production environment variables
 
@@ -321,7 +323,12 @@ After both deploys land, update the *Live demo* table at the top of this README 
 
 ## Migrations
 
-The app still calls `Base.metadata.create_all()` on startup. Alembic is included for schema evolution beyond the demo baseline, and the first migration captures the operational indexes used by asset, event, incident, and summary-cache queries.
+Two paths coexist on purpose:
+
+- **Production (Fly.io)** — the Docker entrypoint runs `alembic upgrade head` before starting uvicorn. Alembic is the source of truth for schema changes against Postgres.
+- **Local development and tests** — `Base.metadata.create_all()` runs on startup so a fresh SQLite file is ready instantly without an extra command. Tests use an isolated SQLite DB created the same way.
+
+The first migration captures the operational indexes used by asset, event, incident, and summary-cache queries. To apply migrations manually against any environment:
 
 ```bash
 cd apps/api

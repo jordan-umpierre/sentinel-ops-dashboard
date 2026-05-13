@@ -268,7 +268,7 @@ def update_incident_status(
     }
     if body.status not in _ALLOWED_TRANSITIONS.get(incident.status, set()):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Cannot transition from '{incident.status.value}' to '{body.status.value}'.",
         )
 
