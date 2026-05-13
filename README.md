@@ -11,10 +11,10 @@ The architecture mirrors the operator-facing layer of platforms like PRISM and M
 | Surface | URL |
 |---|---|
 | Frontend | [`https://sentinel-ops-flame.vercel.app`](https://sentinel-ops-flame.vercel.app) |
-| API | [`https://sentinel-ops-api.fly.dev`](https://sentinel-ops-api.fly.dev) |
-| API docs | [`https://sentinel-ops-api.fly.dev/docs`](https://sentinel-ops-api.fly.dev/docs) |
+| API | [`https://sentinel-ops-api.onrender.com`](https://sentinel-ops-api.onrender.com) |
+| API docs | [`https://sentinel-ops-api.onrender.com/docs`](https://sentinel-ops-api.onrender.com/docs) |
 
-> The API runs on a Fly.io machine that auto-stops when idle. The first request after a quiet period may take ~5–10 s to wake the machine and complete; subsequent requests are immediate.
+> The API runs on Render's free tier and spins down after 15 minutes of inactivity. The first request after a quiet period may take ~30 s to wake the container and complete; subsequent requests are immediate.
 
 The demo accounts in the table below work against the live deployment too.
 
@@ -260,7 +260,7 @@ Backend coverage includes:
 
 ## Production deployment
 
-The repo ships configs for the recommended target: **Vercel for the frontend, Fly.io for the API, Neon for Postgres**. Neon (provisioned via the Vercel Marketplace) keeps the database always-on without paid Fly compute and decouples database availability from the API machine lifecycle.
+The repo ships configs for the recommended target: **Vercel for the frontend, Render for the API, Neon for Postgres**. Neon (provisioned via the Vercel Marketplace) is always-on; Render hosts the Docker container defined in `apps/api/Dockerfile` and auto-deploys on every push to `main` via the Blueprint in `render.yaml`.
 
 ### 1. Provision Postgres on Neon
 
@@ -272,31 +272,22 @@ vercel integration add neon
 # the project's environment variables and a local .env.local file.
 ```
 
-Copy the resulting `DATABASE_URL` — you will paste it into Fly as a secret in the next step. Prefer the direct (non-pooled) endpoint URL because SQLAlchemy + psycopg3 manages its own pool and avoids pgbouncer's prepared-statement limitations.
+Copy the resulting `DATABASE_URL` — you will paste it into Render as a service secret in the next step. Prefer the direct (non-pooled) endpoint URL because SQLAlchemy + psycopg3 manages its own pool and avoids pgbouncer's prepared-statement limitations.
 
-### 2. Deploy the API to Fly.io
+### 2. Deploy the API to Render
 
-```bash
-cd apps/api
+The repo includes a [`render.yaml`](./render.yaml) Blueprint, so the setup is dashboard-driven:
 
-# One-time: install fly CLI and authenticate
-brew install flyctl
-fly auth login
+1. Sign in at https://render.com with GitHub.
+2. **New +** → **Blueprint** → select this repository. Render reads `render.yaml` and proposes one Docker service.
+3. Paste the three `sync: false` env vars when prompted:
+   - `DATABASE_URL` — the `postgresql+psycopg://...` connection string from Neon (must start with `postgresql+psycopg://`).
+   - `CORS_ORIGINS` — comma-separated list including your Vercel production URL.
+   - `OPENAI_API_KEY` — leave empty to use the deterministic fallback provider.
 
-# Create the app and set secrets — note the DATABASE_URL must use the
-# SQLAlchemy psycopg dialect prefix: postgresql+psycopg://...
-fly launch --copy-config --no-deploy --config fly.toml
-fly secrets set \
-  JWT_SECRET_KEY="$(openssl rand -hex 32)" \
-  DATABASE_URL="postgresql+psycopg://<user>:<pass>@<host>/<db>?sslmode=require" \
-  CORS_ORIGINS="https://<your-vercel-domain>" \
-  OPENAI_API_KEY=""  # leave empty to use the deterministic fallback
+`render.yaml` declares the health check (`GET /api/health`), free tier, Oregon region, and `autoDeploy: true` so every push to `main` ships automatically. `JWT_SECRET_KEY` is generated on first deploy so rotation is a one-click operation in the dashboard.
 
-# Ship it. The Dockerfile entrypoint runs `alembic upgrade head` before uvicorn.
-fly deploy --config fly.toml --dockerfile Dockerfile
-```
-
-`fly.toml` declares the health check (`GET /api/health`), HTTPS-only routing, and a soft concurrency cap of 200 connections — enough headroom for the WebSocket clients connected by every dashboard tab.
+> Render's free tier spins the container down after 15 minutes of inactivity. The first request after a quiet period takes ~30 s to wake; subsequent requests are immediate. For a no-cold-start demo, switch the service to the Starter plan ($7/mo).
 
 ### 3. Deploy the frontend to Vercel
 
@@ -308,8 +299,8 @@ vercel login
 # Link the repo (run from repo root — vercel.json builds apps/web)
 vercel link
 
-# Set the build-time env var pointing at the Fly API
-vercel env add VITE_API_BASE_URL production   # paste: https://sentinel-ops-api.fly.dev
+# Set the build-time env var pointing at the Render API
+vercel env add VITE_API_BASE_URL production   # paste: https://sentinel-ops-api.onrender.com
 
 # Ship it
 vercel deploy --prod
@@ -323,11 +314,11 @@ The live URLs from this deploy already power the *Live demo* table at the top of
 
 | Variable | Side | Where to set |
 |---|---|---|
-| `JWT_SECRET_KEY` | API | `fly secrets set` |
-| `DATABASE_URL` | API | `fly secrets set` — the Neon `postgresql+psycopg://...` connection string |
-| `CORS_ORIGINS` | API | `fly secrets set` — must contain the Vercel domain |
-| `OPENAI_API_KEY` | API | `fly secrets set` (optional; empty → deterministic fallback) |
-| `VITE_API_BASE_URL` | Frontend | `vercel env add` — must be the Fly app URL over HTTPS |
+| `JWT_SECRET_KEY` | API | Auto-generated by Render on first deploy (rotate from the dashboard) |
+| `DATABASE_URL` | API | Render dashboard — the Neon `postgresql+psycopg://...` connection string |
+| `CORS_ORIGINS` | API | Render dashboard — must contain the Vercel domain |
+| `OPENAI_API_KEY` | API | Render dashboard (optional; empty → deterministic fallback) |
+| `VITE_API_BASE_URL` | Frontend | `vercel env add` — must be the Render service URL over HTTPS |
 
 `VITE_WS_BASE_URL` is derived from `VITE_API_BASE_URL` automatically (`https://` → `wss://`); override only if the API and WebSocket origins ever diverge.
 
