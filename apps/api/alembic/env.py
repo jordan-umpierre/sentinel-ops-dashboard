@@ -26,10 +26,15 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    return os.environ.get(
+    # Mirror the strip/dequote logic in app.core.config so a leading space or
+    # stray quote pasted into a hosting provider's env var UI doesn't break
+    # alembic. This path runs before the FastAPI Settings layer, so the
+    # normalization has to happen locally.
+    raw = os.environ.get(
         "DATABASE_URL",
         config.get_main_option("sqlalchemy.url"),
     )
+    return (raw or "").strip().strip('"').strip("'")
 
 
 def run_migrations_offline() -> None:
