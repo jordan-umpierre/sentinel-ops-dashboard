@@ -1,10 +1,13 @@
 # Fly.io deployment config for the Sentinel API.
 #
+# Postgres is provisioned on Neon (via the Vercel Marketplace integration),
+# not Fly's unmanaged Postgres — Neon's free tier is always-on, whereas
+# Fly's free-tier Postgres machines auto-suspend on idle.
+#
 # Deploy from the repo root with:
 #   fly launch --copy-config --no-deploy --config apps/api/fly.toml
-#   fly postgres create --name sentinel-db
-#   fly postgres attach sentinel-db
 #   fly secrets set JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+#                   DATABASE_URL="postgresql+psycopg://<neon-conn-string>" \
 #                   CORS_ORIGINS="https://<your-vercel-domain>"
 #   fly deploy --config apps/api/fly.toml --dockerfile apps/api/Dockerfile
 

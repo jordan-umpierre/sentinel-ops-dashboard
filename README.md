@@ -260,9 +260,21 @@ Backend coverage includes:
 
 ## Production deployment
 
-The repo ships configs for the recommended target: **Vercel for the frontend, Fly.io for the API + managed Postgres**.
+The repo ships configs for the recommended target: **Vercel for the frontend, Fly.io for the API, Neon for Postgres**. Neon (provisioned via the Vercel Marketplace) keeps the database always-on without paid Fly compute and decouples database availability from the API machine lifecycle.
 
-### 1. Deploy the API to Fly.io
+### 1. Provision Postgres on Neon
+
+```bash
+# From the repo root, with the Vercel project already linked.
+vercel integration add neon
+# Accept terms in the browser flow, then Vercel auto-provisions a Neon
+# database and connects it to the project. The connection string lands in
+# the project's environment variables and a local .env.local file.
+```
+
+Copy the resulting `DATABASE_URL` — you will paste it into Fly as a secret in the next step. Prefer the direct (non-pooled) endpoint URL because SQLAlchemy + psycopg3 manages its own pool and avoids pgbouncer's prepared-statement limitations.
+
+### 2. Deploy the API to Fly.io
 
 ```bash
 cd apps/api
@@ -271,12 +283,12 @@ cd apps/api
 brew install flyctl
 fly auth login
 
-# Create the app, attach Postgres, set secrets
+# Create the app and set secrets — note the DATABASE_URL must use the
+# SQLAlchemy psycopg dialect prefix: postgresql+psycopg://...
 fly launch --copy-config --no-deploy --config fly.toml
-fly postgres create --name sentinel-db --region ord
-fly postgres attach sentinel-db
 fly secrets set \
   JWT_SECRET_KEY="$(openssl rand -hex 32)" \
+  DATABASE_URL="postgresql+psycopg://<user>:<pass>@<host>/<db>?sslmode=require" \
   CORS_ORIGINS="https://<your-vercel-domain>" \
   OPENAI_API_KEY=""  # leave empty to use the deterministic fallback
 
@@ -286,7 +298,7 @@ fly deploy --config fly.toml --dockerfile Dockerfile
 
 `fly.toml` declares the health check (`GET /api/health`), HTTPS-only routing, and a soft concurrency cap of 200 connections — enough headroom for the WebSocket clients connected by every dashboard tab.
 
-### 2. Deploy the frontend to Vercel
+### 3. Deploy the frontend to Vercel
 
 ```bash
 # One-time: install Vercel CLI and authenticate
@@ -312,7 +324,7 @@ The live URLs from this deploy already power the *Live demo* table at the top of
 | Variable | Side | Where to set |
 |---|---|---|
 | `JWT_SECRET_KEY` | API | `fly secrets set` |
-| `DATABASE_URL` | API | set automatically by `fly postgres attach` |
+| `DATABASE_URL` | API | `fly secrets set` — the Neon `postgresql+psycopg://...` connection string |
 | `CORS_ORIGINS` | API | `fly secrets set` — must contain the Vercel domain |
 | `OPENAI_API_KEY` | API | `fly secrets set` (optional; empty → deterministic fallback) |
 | `VITE_API_BASE_URL` | Frontend | `vercel env add` — must be the Fly app URL over HTTPS |

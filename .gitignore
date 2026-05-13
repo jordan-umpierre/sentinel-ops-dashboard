@@ -29,3 +29,4 @@ PROJECT_BRIEF.md
 .idea/
 .vscode/
 .vercel
+.env*.local
