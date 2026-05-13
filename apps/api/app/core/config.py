@@ -37,6 +37,19 @@ class Settings(BaseSettings):
 
         return ",".join(origin.strip() for origin in value.split(",") if origin.strip())
 
+    @field_validator("DATABASE_URL", "JWT_SECRET_KEY")
+    @classmethod
+    def strip_string_envs(cls, value: str) -> str:
+        """Strip accidental whitespace and surrounding quotes from secret env vars.
+
+        Pasting a connection string into a hosting provider's UI sometimes adds a
+        leading space or wraps the value in quotes — both of which break SQLAlchemy's
+        URL parser without an obvious diagnostic. Normalizing here means a stray
+        keystroke in the dashboard never costs a deploy.
+        """
+
+        return value.strip().strip('"').strip("'")
+
     @property
     def cors_origins(self) -> List[str]:
         """Expose CORS origins as the list shape FastAPI expects."""
