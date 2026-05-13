@@ -1,0 +1,47 @@
+# Render Blueprint for the Sentinel API.
+#
+# Hosting model: Render runs the Docker image defined in apps/api/Dockerfile,
+# Neon (provisioned via the Vercel Marketplace) hosts Postgres. Render auto-
+# deploys on push to main once the repo is connected.
+#
+# Required dashboard-set environment variables (marked `sync: false` below
+# because they contain secrets and per-environment connection strings):
+#   - DATABASE_URL  — full Neon connection string with `postgresql+psycopg://`
+#                     prefix and `?sslmode=require`. Use the direct (non-pooled)
+#                     endpoint so SQLAlchemy's own pool manages connections.
+#   - CORS_ORIGINS  — comma-separated list including the Vercel production URL.
+#   - OPENAI_API_KEY — leave empty to use the deterministic fallback provider.
+
+services:
+  - type: web
+    name: sentinel-ops-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Render generates a strong random value once; rotating it invalidates
+      # all outstanding JWTs, which is the intended security posture.
+      - key: JWT_SECRET_KEY
+        generateValue: true
+
+      # Set in the Render dashboard during Blueprint apply.
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+
+      # Static knobs already documented in the README.
+      - key: SIMULATOR_ENABLED
+        value: "true"
+      - key: SIMULATOR_INTERVAL_SECONDS
+        value: "8"
+      - key: LOG_LEVEL
+        value: "INFO"
+      - key: SUMMARY_CACHE_TTL_MINUTES
+        value: "60"
