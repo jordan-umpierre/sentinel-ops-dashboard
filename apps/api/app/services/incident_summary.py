@@ -77,7 +77,7 @@ class OpenAIIncidentSummaryProvider(IncidentSummaryProvider):
     the deterministic provider so the application remains runnable without drama.
 
     The provider interface makes swapping models or adding caching trivial — a key
-    talking point when explaining the AI layer during a technical interview.
+    maintainable boundary for the AI summary layer.
     """
 
     provider_name = "openai"

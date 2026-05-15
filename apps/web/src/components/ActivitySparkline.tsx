@@ -11,7 +11,7 @@ type Props = {
  * Why SVG instead of a canvas or a library?
  * SVG is declarative, accessible, and trivially server-renderable. For a 24-bar
  * histogram it is the simplest correct tool, and not needing recharts or
- * chart.js keeps the bundle lean and the interview explanation short.
+ * chart.js keeps the bundle lean and the component dependency-free.
  */
 export function ActivitySparkline({ activity }: Props) {
   const { buckets, total_24h, peak_hour } = activity;

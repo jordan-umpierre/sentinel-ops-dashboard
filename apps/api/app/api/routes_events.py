@@ -36,7 +36,7 @@ def _build_event_query(
     query = select(Event).outerjoin(Asset).options(selectinload(Event.asset))
 
     # A single search box is faster for demo use than separate text filters, but
-    # structured filters below still show clean query handling for interviews.
+    # structured filters below keep query behavior explicit and testable.
     if search:
         pattern = f"%{search.lower()}%"
         query = query.where(
