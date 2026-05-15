@@ -91,7 +91,7 @@ def get_event_activity(
 
     Bucketing is done in Python after a single date-filtered query so the
     implementation stays compatible with both SQLite (local dev) and PostgreSQL
-    (Docker). This is worth explaining in an interview: it avoids db-specific
+    (Docker). This avoids db-specific
     date functions like date_trunc (Postgres) vs strftime (SQLite) at the cost
     of fetching more rows — acceptable at demo scale.
     """

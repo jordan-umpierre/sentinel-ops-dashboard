@@ -7,7 +7,7 @@ specifically that the fallback always returns all required fields in the correct
 shape, so a missing API key never breaks the incident UI.
 
 Testing the provider interface separately from the HTTP layer lets you explain
-the abstraction design clearly in an interview: the route delegates to a provider,
+the abstraction design clearly: the route delegates to a provider,
 the provider can be swapped, and the contract is verified here.
 """
 

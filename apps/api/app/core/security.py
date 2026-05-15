@@ -9,7 +9,7 @@ from app.core.config import settings
 
 # Password hashing is isolated here so route handlers never know or care which
 # algorithm is used. That keeps security details out of product code and makes
-# the implementation easier to explain in an interview.
+# the implementation easier to audit and maintain.
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 

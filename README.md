@@ -1,8 +1,8 @@
-# Sentinel — Operational Awareness Console
+# Sentinel - Operational Awareness Console
 
-A full-stack command-and-control (C2) dashboard for field asset monitoring, correlated incident triage, and AI-assisted operator decision support.
+A full-stack operational awareness dashboard for field asset monitoring, correlated incident triage, and AI-assisted operator decision support.
 
-The architecture mirrors the operator-facing layer of platforms like PRISM and MOSAIC: field assets report telemetry, events are correlated into incidents, and operators get a unified picture of site health across personnel, vehicles, and sensors — without toggling between tools.
+Field assets report telemetry, events are correlated into incidents, and operators get a unified picture of site health across personnel, vehicles, and sensors without toggling between separate tools.
 
 ---
 
@@ -191,11 +191,11 @@ The following 8-step walkthrough covers every system capability in under 5 minut
 
 ---
 
-## Key files for code review
+## Notable Implementation Areas
 
-| File | What to highlight |
+| File | Why it matters |
 |---|---|
-| `apps/api/app/services/incident_summary.py` | ABC provider interface; OpenAI Chat Completions; deterministic fallback; DB cache with TTL and explicit invalidation |
+| `apps/api/app/services/incident_summary.py` | Provider interface, OpenAI integration, deterministic fallback, DB cache with TTL, and explicit invalidation |
 | `apps/api/app/api/routes_incidents.py` | State machine enforcement (invalid transitions → 422); RBAC (viewer → 403); cache invalidation on status change |
 | `apps/api/app/api/routes_events.py` | Shared filter helper; paginated list; streaming CSV export via `StreamingResponse` |
 | `apps/api/app/api/routes_realtime.py` | WebSocket first-frame auth handshake; 5 s timeout; 1008 close on rejection |
@@ -328,7 +328,7 @@ The live URLs from this deploy already power the *Live demo* table at the top of
 
 Two paths coexist on purpose:
 
-- **Production (Fly.io)** — the Docker entrypoint runs `alembic upgrade head` before starting uvicorn. Alembic is the source of truth for schema changes against Postgres.
+- **Production containers** — the Docker entrypoint runs `alembic upgrade head` before starting uvicorn. Alembic is the source of truth for schema changes against Postgres.
 - **Local development and tests** — `Base.metadata.create_all()` runs on startup so a fresh SQLite file is ready instantly without an extra command. Tests use an isolated SQLite DB created the same way.
 
 The first migration captures the operational indexes used by asset, event, incident, and summary-cache queries. To apply migrations manually against any environment:
